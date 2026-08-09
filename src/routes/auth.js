@@ -38,8 +38,12 @@ router.post("/register", async (req, res) => {
       userId: user.id,
     });
   } catch (err) {
-    // Handle duplicate email (unique constraint)
+    // Handle duplicate username/email (unique constraints)
     if (err?.code === "P2002") {
+      const field = err.meta?.target?.[0]; // e.g. "username" or "email"
+      if (field === "username") {
+        return res.status(409).json({ error: "Username already taken" });
+      }
       return res.status(409).json({ error: "Email already registered" });
     }
     console.error(err);

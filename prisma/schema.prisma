@@ -12,14 +12,32 @@ datasource db {
   provider = "postgresql"
 }
 
-
 //  user table
 model User {
-  id Int @id @default(autoincrement())
-  username String 
-  email String @unique
+  id            Int      @id @default(autoincrement())
+  username      String    @unique
+  email         String   @unique
   password_hash String
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  conversationMembers ConversationMember[]
 }
 
+model Conversation {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+
+  members ConversationMember[]
+}
+
+model ConversationMember {
+  id             Int @id @default(autoincrement())
+  conversationId Int
+  userId         Int
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@unique([conversationId, userId])
+}

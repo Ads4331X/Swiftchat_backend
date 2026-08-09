@@ -59,6 +59,10 @@ router.patch("/update-user-info", auth, async (req, res) => {
     return res.json(updatedUser);
   } catch (err) {
     if (err?.code === "P2002") {
+      const field = err.meta?.target?.[0]; // e.g. "username" or "email"
+      if (field === "username") {
+        return res.status(409).json({ error: "Username already taken" });
+      }
       return res.status(409).json({ error: "Email already in use" });
     }
     if (err?.code === "P2025") {
