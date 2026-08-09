@@ -1,35 +1,36 @@
 import * as express from "express";
 import prisma from "../prisma.js";
-import auth from "../middleware/auth";
+import auth from "../middleware/auth.middleware.js";
 import {
   validateEmail,
   validateUsername,
   validatePassword,
   validatePasswordMatch,
-} from "../validators/auth.validator";
-import * as bcrypt from "bcrypt";
-import { verify } from "jsonwebtoken";
+} from "../validators/auth.validator.js";
+import bcrypt from "bcryptjs";
 
 const router = express.Router();
 
 router.get("/user-details", auth, async (req, res) => {
-  const user = await prisma.user.findUnique({
-    where: {
-      id: req.userId,
-    },
-    select: {
-      username: true,
-      email: true,
-      created_at: true,
-    },
-  });
-  if (!user) {
-    return res.status(404).json({
-      error: "User not found",
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: {
+        username: true,
+        email: true,
+        created_at: true,
+      },
     });
-  }
 
-  return res.json(user);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    return res.json(user);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 router.patch("/update-user-info", auth, async (req, res) => {
@@ -69,66 +70,82 @@ router.patch("/update-user-info", auth, async (req, res) => {
 });
 
 router.post("/verify-password", auth, async (req, res) => {
-  const { currentPassword } = req.body;
+  try {
+    const { currentPassword } = req.body;
 
-  const user = await prisma.user.findUnique({
-    where: { id: req.userId },
-    select: {
-      password_hash: true,
-    },
-  });
+    if (!currentPassword) {
+      return res.status(400).json({ error: "Current password is required" });
+    }
 
-  if (!user) {
-    return res.status(404).json({
-      error: "User not found",
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { password_hash: true },
     });
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+
+    if (!isMatch) {
+      return res.status(401).json({ verify: false });
+    }
+
+    return res.status(200).json({ verify: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Internal server error" });
   }
-
-  const compare = await bcrypt.compare(currentPassword, user.password_hash);
-
-  if (!compare) {
-    return res.status(401).json({
-      verify: false,
-    });
-  }
-
-  return res.status(200).json({
-    verify: true,
-  });
 });
 
 router.patch("/change-password", auth, async (req, res) => {
-  const { newPassword, confirmNewPassword } = req.body;
+  try {
+    const { currentPassword, newPassword, confirmNewPassword } = req.body;
 
-  //  validate newPassword and confirmNewPassword
-  const newPasswordValidate = validatePassword(newPassword);
+    if (!currentPassword) {
+      return res.status(400).json({ error: "Current password is required" });
+    }
 
-  if (newPasswordValidate.error) {
-    return res.status(400).json({
-      error: newPasswordValidate.error,
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { password_hash: true },
     });
-  }
 
-  const isMatch = validatePasswordMatch(newPassword, confirmNewPassword);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
 
-  if (isMatch.error) {
-    return res.status(400).json({
-      error: isMatch.error,
+    const currentMatch = await bcrypt.compare(
+      currentPassword,
+      user.password_hash,
+    );
+    if (!currentMatch) {
+      return res.status(401).json({ error: "Current password is incorrect" });
+    }
+
+    const newPasswordValidate = validatePassword(newPassword);
+    if (newPasswordValidate.error) {
+      return res.status(400).json({ error: newPasswordValidate.error });
+    }
+
+    const isMatch = validatePasswordMatch(newPassword, confirmNewPassword);
+    if (isMatch.error) {
+      return res.status(400).json({ error: isMatch.error });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+
+    await prisma.user.update({
+      where: { id: req.userId },
+      data: { password_hash: passwordHash },
     });
+
+    return res.status(200).json({ message: "Password changed successfully" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Internal server error" });
   }
-
-  const passwordHash = await bcrypt.hash(newPassword, 12);
-
-  await prisma.user.update({
-    where: {
-      id: req.userId,
-    },
-    data: {
-      password_hash: passwordHash,
-    },
-  });
-
-  return res.status(200).json({
-    message: "Password changed successfully",
-  });
 });
+
+export default router;
