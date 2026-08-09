@@ -1,13 +1,13 @@
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
-import regesterUser from "./routes/auth.js";
+import auth from "./routes/auth.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.use("/api/auth", regesterUser);
+app.use("/api/auth", auth);
 
 app.get("/", (req, res) => {
   res.json({ message: "Chat API is running" });
