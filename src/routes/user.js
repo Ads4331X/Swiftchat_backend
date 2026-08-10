@@ -1,6 +1,6 @@
 import * as express from "express";
 import prisma from "../prisma.js";
-import auth from "../middleware/auth.middleware.js";
+import auth from "../middleware/auth.js";
 import {
   validateEmail,
   validateUsername,
@@ -59,8 +59,12 @@ router.patch("/update-user-info", auth, async (req, res) => {
     return res.json(updatedUser);
   } catch (err) {
     if (err?.code === "P2002") {
-      const field = err.meta?.target?.[0]; // e.g. "username" or "email"
-      if (field === "username") {
+      // Prisma 7 with adapter-pg nests the constraint fields here
+      const fields =
+        err.meta?.driverAdapterError?.cause?.constraint?.fields ||
+        err.meta?.target ||
+        [];
+      if (fields.includes("username")) {
         return res.status(409).json({ error: "Username already taken" });
       }
       return res.status(409).json({ error: "Email already in use" });
@@ -149,6 +153,40 @@ router.patch("/change-password", auth, async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/search", auth, async (req, res) => {
+  try {
+    const { username } = req.query;
+
+    if (!username?.trim()) {
+      return res.status(400).json({
+        error: "Username is required",
+      });
+    }
+
+    const users = await prisma.user.findMany({
+      where: {
+        username: {
+          contains: username.trim(),
+          mode: "insensitive",
+        },
+      },
+      select: {
+        id: true,
+        username: true,
+      },
+      take: 10,
+    });
+
+    return res.status(200).json({
+      users,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: "Internal server error",
+    });
   }
 });
 

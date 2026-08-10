@@ -1,9 +1,10 @@
 import * as express from "express";
 import auth from "../middleware/auth.js";
 import prisma from "../prisma.js";
+import { SortOrder } from "../../generated/prisma/internal/prismaNamespace.js";
 const router = express.Router();
 
-router.get("/conversations", auth, async (req, res) => {
+router.get("/", auth, async (req, res) => {
   try {
     const conversations = await prisma.conversation.findMany({
       where: {
@@ -89,3 +90,58 @@ router.post("/new-conversation", auth, async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
+router.get("/:id/messages", auth, async (req, res) => {
+  try {
+    const { id: conversationId } = req.params;
+
+    const membership = await prisma.conversationMember.findFirst({
+      where: { conversationId: conversationId, userId: req.user.id },
+    });
+
+    if (!membership)
+      return res
+        .status(403)
+        .json({ error: "You are not a member of this conversation" });
+
+    const messages = await prisma.message.findMany({
+      where: { conversationId: conversationId },
+      orderBy: {
+        sentAt: "asc",
+      },
+    });
+
+    return res.status(200).json(messages);
+  } catch (error) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/messages", auth, async (req, res) => {
+  try {
+    const { messageText, conversationId } = req.body;
+    const senderId = req.userId;
+
+    const membership = await prisma.conversationMember.findFirst({
+      where: { conversationId: conversationId, userId: senderId },
+    });
+
+    if (!membership)
+      return res.status(403).json({
+        error: "You are not a member of this conversation",
+      });
+
+    const message = await prisma.message.create({
+      data: {
+        conversationId: conversationId,
+        senderId: senderId,
+        text: messageText,
+      },
+    });
+
+    return res.status(201).json(message);
+  } catch (error) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+export default router;

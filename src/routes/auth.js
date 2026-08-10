@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import prisma from "../prisma.js";
 import validateRegister from "../validators/auth.validator.js";
-import * as jwt from "jsonwebtoken";
+import jwt from "jsonwebtoken";
 
 const router = Router();
 
@@ -40,8 +40,12 @@ router.post("/register", async (req, res) => {
   } catch (err) {
     // Handle duplicate username/email (unique constraints)
     if (err?.code === "P2002") {
-      const field = err.meta?.target?.[0]; // e.g. "username" or "email"
-      if (field === "username") {
+      // Prisma 7 with adapter-pg nests the constraint fields here
+      const fields =
+        err.meta?.driverAdapterError?.cause?.constraint?.fields ||
+        err.meta?.target ||
+        [];
+      if (fields.includes("username")) {
         return res.status(409).json({ error: "Username already taken" });
       }
       return res.status(409).json({ error: "Email already registered" });
