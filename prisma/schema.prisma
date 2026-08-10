@@ -22,7 +22,7 @@ model User {
   updated_at    DateTime @updatedAt
 
   conversationMembers ConversationMember[]
-  messages Messages[]
+  messages Message[]
 }
 
 model Conversation {
@@ -30,7 +30,7 @@ model Conversation {
   createdAt DateTime @default(now())
 
   members ConversationMember[]
-  messages Messages[]
+  messages Message[]
 }
 
 model ConversationMember {
@@ -45,16 +45,14 @@ model ConversationMember {
 }
 
 
-model Messages {
-  id Int @id @default(autoincrement())
-  text String 
-  conversationId Int 
-  senderId Int
-  editedAt DateTime @updatedAt
-  sendAt DateTime @default(now())
+model Message {
+  id             Int      @id @default(autoincrement())
+  text           String
+  conversationId Int
+  senderId       Int
+  editedAt       DateTime @updatedAt
+  sentAt         DateTime @default(now())
+
   conversation Conversation @relation(fields: [conversationId], references: [id])
   user         User         @relation(fields: [senderId], references: [id])
-    @@unique([conversationId, senderId])
-
-
 }
