@@ -4,10 +4,18 @@ import "dotenv/config";
 import auth from "./routes/auth.js";
 import user from "./routes/user.js";
 import conversation from "./routes/conversations.js";
+import { Server } from "socket.io";
+import http from "http";
+import jwt from "jsonwebtoken";
+import { setupSocket } from "./socket.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const server = http.createServer(app);
+const io = new Server(server);
+setupSocket(io);
 
 app.use("/api/auth", auth);
 app.use("/api/user", user);
@@ -19,6 +27,6 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

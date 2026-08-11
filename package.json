@@ -19,6 +19,7 @@
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.0",
     "prisma": "^7.9.1",
+    "socket.io": "^4.8.3",
     "validator": "^13.15.35"
   }
 }
