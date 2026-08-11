@@ -17,6 +17,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 setupSocket(io);
 
+app.set("io", io);
 app.use("/api/auth", auth);
 app.use("/api/user", user);
 app.use("/api/conversations", conversation);

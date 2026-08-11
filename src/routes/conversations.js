@@ -139,6 +139,9 @@ router.post("/messages", auth, async (req, res) => {
       },
     });
 
+    const io = req.app.get("io");
+    io.to(String(conversationId)).emit("new-message", messageText);
+
     return res.status(201).json(message);
   } catch (error) {
     return res.status(500).json({ error: "Internal server error" });
@@ -170,6 +173,8 @@ router.patch("/messages-edit/:id", auth, async (req, res) => {
         text: text,
       },
     });
+    const io = req.app.get("io");
+    io.to(String(conversationId)).emit("message-updated", updatedMessage);
 
     return res.status(200).json(updatedMessage);
   } catch (error) {
@@ -198,6 +203,9 @@ router.delete("/messages-edit/:id", auth, async (req, res) => {
     const deletedMessage = await prisma.message.delete({
       where: { id: messageId },
     });
+
+    const io = req.app.get("io");
+    io.to(String(conversationId)).emit("message-deleted", { id: messageId });
 
     return res.status(200).json(deletedMessage);
   } catch (error) {
