@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import prisma from "./prisma";
+import prisma from "./prisma.js";
 
 export function setupSocket(io) {
   io.use((socket, next) => {
