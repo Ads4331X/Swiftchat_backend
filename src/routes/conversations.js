@@ -20,14 +20,26 @@ router.get("/", auth, async (req, res) => {
             },
           },
         },
+        messages: {
+          orderBy: { sentAt: "desc" },
+          take: 1,
+          select: { id: true, text: true, sentAt: true, senderId: true },
+        },
       },
     });
 
-    const cleaned = conversations.map((conv) => ({
+    const sorted = conversations.sort((a, b) => {
+      const aTime = a.messages[0]?.sentAt ?? a.createdAt;
+      const bTime = b.messages[0]?.sentAt ?? b.createdAt;
+      return new Date(bTime).getTime() - new Date(aTime).getTime();
+    });
+
+    const cleaned = sorted.map((conv) => ({
       id: conv.id,
       members: conv.members
         .map((m) => m.user)
         .filter((u) => u.id !== req.userId),
+      lastMessage: conv.messages[0] ?? null,
     }));
 
     return res.json(cleaned);

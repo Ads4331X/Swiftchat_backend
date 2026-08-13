@@ -196,4 +196,50 @@ router.get("/search", auth, async (req, res) => {
   }
 });
 
+router.delete("/account", auth, async (req, res) => {
+  try {
+    const memberships = await prisma.conversationMember.findMany({
+      where: { userId: req.userId },
+      select: { conversationId: true },
+    });
+    const conversationIds = memberships.map((m) => m.conversationId);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.message.deleteMany({ where: { senderId: req.userId } });
+
+      await tx.conversationMember.deleteMany({ where: { userId: req.userId } });
+
+      if (conversationIds.length > 0) {
+        const remaining = await tx.conversationMember.findMany({
+          where: { conversationId: { in: conversationIds } },
+          select: { conversationId: true },
+        });
+        const active = new Set(remaining.map((r) => r.conversationId));
+        const emptyConversationIds = conversationIds.filter(
+          (id) => !active.has(id),
+        );
+
+        if (emptyConversationIds.length > 0) {
+          await tx.message.deleteMany({
+            where: { conversationId: { in: emptyConversationIds } },
+          });
+          await tx.conversation.deleteMany({
+            where: { id: { in: emptyConversationIds } },
+          });
+        }
+      }
+
+      await tx.user.delete({ where: { id: req.userId } });
+    });
+
+    return res.status(200).json({ message: "Account deleted successfully" });
+  } catch (err) {
+    if (err?.code === "P2025") {
+      return res.status(404).json({ error: "User not found" });
+    }
+    console.error(err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;
