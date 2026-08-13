@@ -25,7 +25,9 @@ router.get("/", auth, async (req, res) => {
 
     const cleaned = conversations.map((conv) => ({
       id: conv.id,
-      members: conv.members.map((m) => m.user),
+      members: conv.members
+        .map((m) => m.user)
+        .filter((u) => u.id !== req.userId),
     }));
 
     return res.json(cleaned);
