@@ -172,10 +172,16 @@ router.get("/search", auth, async (req, res) => {
           contains: username.trim(),
           mode: "insensitive",
         },
+        id: {
+          not: req.userId,
+        },
       },
       select: {
         id: true,
         username: true,
+      },
+      orderBy: {
+        username: "asc",
       },
       take: 10,
     });

@@ -92,9 +92,9 @@ router.post("/new-conversation", auth, async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
-router.get("/:id/messages", auth, async (req, res) => {
+router.get("/messages/:conversationId", auth, async (req, res) => {
   try {
-    const conversationId = parseInt(req.params.id);
+    const conversationId = parseInt(req.params.conversationId);
 
     const membership = await prisma.conversationMember.findFirst({
       where: { conversationId: conversationId, userId: req.userId },
@@ -105,12 +105,29 @@ router.get("/:id/messages", auth, async (req, res) => {
         .status(403)
         .json({ error: "You are not a member of this conversation" });
 
+    const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+    const before = parseInt(req.query.before);
+
+    const where = { conversationId: conversationId };
+    if (before) {
+      const cursorMessage = await prisma.message.findFirst({
+        where: { id: before },
+        select: { sentAt: true },
+      });
+      if (cursorMessage) {
+        where.sentAt = { lt: cursorMessage.sentAt };
+      }
+    }
+
     const messages = await prisma.message.findMany({
-      where: { conversationId: conversationId },
+      where,
       orderBy: {
-        sentAt: "asc",
+        sentAt: "desc",
       },
+      take: limit,
     });
+
+    messages.reverse();
 
     return res.status(200).json(messages);
   } catch (error) {
@@ -142,7 +159,7 @@ router.post("/messages", auth, async (req, res) => {
     });
 
     const io = req.app.get("io");
-    io.to(String(conversationId)).emit("new-message", messageText);
+    io.to(String(conversationId)).emit("new-message", message);
 
     return res.status(201).json(message);
   } catch (error) {
@@ -150,7 +167,7 @@ router.post("/messages", auth, async (req, res) => {
   }
 });
 
-router.patch("/messages-edit/:id", auth, async (req, res) => {
+router.patch("/messages/:id", auth, async (req, res) => {
   try {
     const messageId = parseInt(req.params.id);
     const { text } = req.body;
@@ -176,7 +193,7 @@ router.patch("/messages-edit/:id", auth, async (req, res) => {
       },
     });
     const io = req.app.get("io");
-    io.to(String(conversationId)).emit("message-updated", updatedMessage);
+    io.to(String(message.conversationId)).emit("message-updated", updatedMessage);
 
     return res.status(200).json(updatedMessage);
   } catch (error) {
@@ -184,7 +201,7 @@ router.patch("/messages-edit/:id", auth, async (req, res) => {
   }
 });
 
-router.delete("/messages-edit/:id", auth, async (req, res) => {
+router.delete("/messages/:id", auth, async (req, res) => {
   try {
     const messageId = parseInt(req.params.id);
 
@@ -207,7 +224,9 @@ router.delete("/messages-edit/:id", auth, async (req, res) => {
     });
 
     const io = req.app.get("io");
-    io.to(String(conversationId)).emit("message-deleted", { id: messageId });
+    io.to(String(message.conversationId)).emit("message-deleted", {
+      id: messageId,
+    });
 
     return res.status(200).json(deletedMessage);
   } catch (error) {
