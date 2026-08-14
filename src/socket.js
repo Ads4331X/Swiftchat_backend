@@ -26,5 +26,11 @@ export function setupSocket(io) {
     members.forEach((member) => {
       socket.join(String(member.conversationId));
     });
+    socket.on("join-conversation", async (id) => {
+      const check = await prisma.conversationMember.findFirst({
+        where: { conversationId: id, userId: socket.userId },
+      });
+      if (check) socket.join(String(id));
+    });
   });
 }
