@@ -27,10 +27,12 @@ export function setupSocket(io) {
       socket.join(String(member.conversationId));
     });
     socket.on("join-conversation", async (id) => {
+      const conversationId = Number(id);
+      if (!conversationId) return;
       const check = await prisma.conversationMember.findFirst({
-        where: { conversationId: id, userId: socket.userId },
+        where: { conversationId, userId: socket.userId },
       });
-      if (check) socket.join(String(id));
+      if (check) socket.join(String(conversationId));
     });
   });
 }
