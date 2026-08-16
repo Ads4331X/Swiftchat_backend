@@ -19,7 +19,7 @@ export function setupSocket(io) {
   });
 
   io.on("connection", async (socket) => {
-    console.log("User connected:", socket.userId);
+    // console.log("User connected:", socket.userId);
     const members = await prisma.conversationMember.findMany({
       where: { userId: socket.userId },
     });

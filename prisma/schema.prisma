@@ -20,10 +20,24 @@ model User {
   password_hash String
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
-  avatar String
+  avatar String @default("")
 
   conversationMembers ConversationMember[]
   messages Message[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id Int @id @default(autoincrement())
+  userId Int
+  tokenHash String @unique
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Conversation {
