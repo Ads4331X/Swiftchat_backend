@@ -10,13 +10,28 @@ import jwt from "jsonwebtoken";
 import { setupSocket } from "./socket.js";
 
 const app = express();
-app.use(cors());
+// app.use(cors());
 app.use(express.json());
 
 const server = http.createServer(app);
-const io = new Server(server);
-setupSocket(io);
 
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
+
+// Enable CORS for Socket.IO
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
+});
+
+setupSocket(io);
 app.set("io", io);
 app.use("/api/auth", auth);
 app.use("/api/user", user);
