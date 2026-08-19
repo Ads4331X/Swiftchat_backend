@@ -16,7 +16,7 @@ router.get("/", auth, async (req, res) => {
         members: {
           include: {
             user: {
-              select: { id: true, username: true },
+              select: { id: true, username: true, avatar: true },
             },
           },
         },
@@ -54,7 +54,7 @@ router.post("/new-conversation", auth, async (req, res) => {
 
     const targetedUser = await prisma.user.findUnique({
       where: { username: targetUsername },
-      select: { id: true, username: true },
+      select: { id: true, username: true, avatar: true },
     });
     if (!targetedUser)
       return res.status(400).json({
@@ -76,7 +76,7 @@ router.post("/new-conversation", auth, async (req, res) => {
       include: {
         members: {
           include: {
-            user: { select: { id: true, username: true } },
+            user: { select: { id: true, username: true, avatar: true } },
           },
         },
       },

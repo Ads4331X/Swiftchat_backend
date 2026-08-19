@@ -179,6 +179,7 @@ router.get("/search", auth, async (req, res) => {
       select: {
         id: true,
         username: true,
+        avatar: true,
       },
       orderBy: {
         username: "asc",
