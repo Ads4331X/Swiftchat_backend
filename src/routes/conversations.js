@@ -117,7 +117,7 @@ router.get("/messages/:conversationId", auth, async (req, res) => {
         .status(403)
         .json({ error: "You are not a member of this conversation" });
 
-    const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
     const before = parseInt(req.query.before);
 
     const where = { conversationId: conversationId };
