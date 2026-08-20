@@ -243,4 +243,41 @@ router.delete("/account", auth, async (req, res) => {
   }
 });
 
+router.put("/public-key", auth, async (req, res) => {
+  try {
+    const { publicKey } = req.body;
+
+    if (!publicKey) {
+      return res.status(400).json({
+        error: "Public key is required",
+      });
+    }
+
+    await prisma.user.update({
+      where: {
+        id: req.userId,
+      },
+      data: {
+        publicKey,
+      },
+    });
+
+    return res.status(200).json({
+      message: "Public key saved",
+    });
+  } catch (err) {
+    if (err?.code === "P2025") {
+      return res.status(404).json({
+        error: "User not found",
+      });
+    }
+
+    console.error(err);
+
+    return res.status(500).json({
+      error: "Internal server error",
+    });
+  }
+});
+
 export default router;
