@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -12,65 +7,58 @@ datasource db {
   provider = "postgresql"
 }
 
-//  user table
 model User {
-  id            Int      @id @default(autoincrement())
-  username      String    @unique
-  email         String   @unique
-  password_hash String
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
-  avatar String @default("")
-  publicKey String?
-
+  id                  Int                  @id @default(autoincrement())
+  username            String               @unique
+  email               String               @unique
+  password_hash       String
+  created_at          DateTime             @default(now())
+  updated_at          DateTime             @updatedAt
+  avatar              String               @default("")
+  publicKey           String?
   conversationMembers ConversationMember[]
-  messages Message[]
+  messages            Message[]
   passwordResetTokens PasswordResetToken[]
 }
 
 model PasswordResetToken {
-  id Int @id @default(autoincrement())
-  userId Int
-  tokenHash String @unique
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  tokenHash String    @unique
   expiresAt DateTime
-  usedAt DateTime?
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model Conversation {
-  id        Int      @id @default(autoincrement())
-  createdAt DateTime @default(now())
-
-  members ConversationMember[]
-  messages Message[]
+  id        Int                  @id @default(autoincrement())
+  createdAt DateTime             @default(now())
+  members   ConversationMember[]
+  messages  Message[]
 }
 
 model ConversationMember {
-  id             Int @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   conversationId Int
   userId         Int
-
-  conversation Conversation @relation(fields: [conversationId], references: [id])
-  user         User         @relation(fields: [userId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
 
   @@unique([conversationId, userId])
 }
 
-
 model Message {
-  id             Int      @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   text           String
   conversationId Int
   senderId       Int
-  editedAt       DateTime @updatedAt
-  sentAt         DateTime @default(now())
-
-  conversation Conversation @relation(fields: [conversationId], references: [id])
-  user         User         @relation(fields: [senderId], references: [id])
+  editedAt       DateTime     @updatedAt
+  sentAt         DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  user           User         @relation(fields: [senderId], references: [id])
 
   @@index([conversationId, sentAt])
 }

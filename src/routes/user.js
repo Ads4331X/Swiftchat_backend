@@ -280,4 +280,36 @@ router.put("/public-key", auth, async (req, res) => {
   }
 });
 
+router.get("/:userId/public-key", auth, async (req, res) => {
+  try {
+    const targetedUserId = parseInt(req.params.userId);
+
+    const targetedUser = await prisma.user.findUnique({
+      where: { id: targetedUserId },
+      select: { publicKey: true },
+    });
+
+    if (!targetedUser) {
+      return res.status(404).json({
+        error: "User not found",
+      });
+    }
+
+    if (!targetedUser.publicKey) {
+      return res.status(404).json({
+        error: "Public key not found",
+      });
+    }
+
+    return res.status(200).json({
+      publicKey: targetedUser.publicKey,
+    });
+  } catch (err) {
+    console.error(err);
+
+    return res.status(500).json({
+      error: "Internal server error",
+    });
+  }
+});
 export default router;
