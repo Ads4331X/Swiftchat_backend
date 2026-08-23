@@ -19,6 +19,7 @@ model User {
   conversationMembers ConversationMember[]
   messages            Message[]
   passwordResetTokens PasswordResetToken[]
+  conversationsCreated Conversation[]
 }
 
 model PasswordResetToken {
@@ -34,31 +35,36 @@ model PasswordResetToken {
 }
 
 model Conversation {
-  id        Int                  @id @default(autoincrement())
-  createdAt DateTime             @default(now())
-  members   ConversationMember[]
-  messages  Message[]
+  id          Int                  @id @default(autoincrement())
+  createdAt   DateTime             @default(now())
+  createdById Int
+  creator     User                 @relation(fields: [createdById], references: [id])
+
+  members  ConversationMember[]
+  messages Message[]
 }
 
 model ConversationMember {
-  id             Int          @id @default(autoincrement())
-  conversationId Int
-  userId         Int
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
-  user           User         @relation(fields: [userId], references: [id])
+  id                       Int          @id @default(autoincrement())
+  conversationId           Int
+  userId                   Int
   encryptedConversationKey String?
-  nonce String?
+  nonce                    String?
+  conversation             Conversation @relation(fields: [conversationId], references: [id])
+  user                     User         @relation(fields: [userId], references: [id])
 
   @@unique([conversationId, userId])
 }
 
 model Message {
   id             Int          @id @default(autoincrement())
-  text           String
+  text           String // this is encrypted text ( message)
+  nonce          String
   conversationId Int
   senderId       Int
   editedAt       DateTime     @updatedAt
   sentAt         DateTime     @default(now())
+
   conversation   Conversation @relation(fields: [conversationId], references: [id])
   user           User         @relation(fields: [senderId], references: [id])
 

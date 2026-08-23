@@ -36,6 +36,7 @@ router.get("/", auth, async (req, res) => {
 
     const cleaned = sorted.map((conv) => ({
       id: conv.id,
+      createdById: conv.createdById,
       members: conv.members
         .map((m) => m.user)
         .filter((u) => u.id !== req.userId),
@@ -91,6 +92,7 @@ router.post("/new-conversation", auth, async (req, res) => {
 
     const newConversation = await prisma.conversation.create({
       data: {
+        createdById: req.userId,
         members: {
           create: [{ userId: req.userId }, { userId: targetedUser.id }],
         },
@@ -149,9 +151,18 @@ router.get("/messages/:conversationId", auth, async (req, res) => {
 
 router.post("/messages", auth, async (req, res) => {
   try {
-    const { messageText, conversationId: rawConversationId } = req.body;
+    const { messageText, conversationId: rawConversationId, nonce } = req.body;
     const conversationId = parseInt(rawConversationId);
     const senderId = req.userId;
+
+    if (!messageText || !nonce || Number.isNaN(conversationId)) {
+      return res.status(400).json({
+        error: "messageText, nonce, and conversationId are required",
+      });
+    }
+
+    const normalizedNonce =
+      typeof nonce === "string" ? nonce : Buffer.from(nonce).toString("base64");
 
     const membership = await prisma.conversationMember.findFirst({
       where: { conversationId: conversationId, userId: senderId },
@@ -167,6 +178,7 @@ router.post("/messages", auth, async (req, res) => {
         conversationId: conversationId,
         senderId: senderId,
         text: messageText,
+        nonce: normalizedNonce,
       },
     });
 
@@ -182,7 +194,16 @@ router.post("/messages", auth, async (req, res) => {
 router.patch("/messages/:id", auth, async (req, res) => {
   try {
     const messageId = parseInt(req.params.id);
-    const { text } = req.body;
+    const { text, nonce } = req.body;
+
+    if (!text || !nonce || Number.isNaN(messageId)) {
+      return res.status(400).json({
+        error: "text and nonce are required",
+      });
+    }
+
+    const normalizedNonce =
+      typeof nonce === "string" ? nonce : Buffer.from(nonce).toString("base64");
 
     const message = await prisma.message.findUnique({
       where: { id: messageId },
@@ -202,6 +223,7 @@ router.patch("/messages/:id", auth, async (req, res) => {
       where: { id: messageId },
       data: {
         text: text,
+        nonce: normalizedNonce,
       },
     });
     const io = req.app.get("io");
@@ -274,6 +296,20 @@ router.put("/:id/key/:userId", auth, async (req, res) => {
         error: "You are not a member of this conversation",
       });
     }
+    const targetMember = await prisma.conversationMember.findUnique({
+      where: {
+        conversationId_userId: {
+          conversationId,
+          userId,
+        },
+      },
+    });
+
+    if (!targetMember) {
+      return res.status(404).json({
+        error: "Target user is not a member of this conversation",
+      });
+    }
 
     await prisma.conversationMember.update({
       where: {
@@ -298,32 +334,39 @@ router.put("/:id/key/:userId", auth, async (req, res) => {
     });
   }
 });
-
 router.get("/:id/key", auth, async (req, res) => {
   try {
     const conversationId = parseInt(req.params.id);
     const userId = req.userId;
+
     const result = await prisma.conversationMember.findUnique({
       where: {
         conversationId_userId: {
-          conversationId: conversationId,
-          userId: userId,
+          conversationId,
+          userId,
         },
       },
       select: {
         encryptedConversationKey: true,
         nonce: true,
+        conversation: {
+          select: {
+            createdById: true,
+          },
+        },
       },
     });
 
-    if (!result)
+    if (!result) {
       return res.status(403).json({
         error: "You are not a member of this conversation",
       });
+    }
 
     return res.status(200).json({
       encryptedConversationKey: result.encryptedConversationKey,
       nonce: result.nonce,
+      createdById: result.conversation.createdById,
     });
   } catch (error) {
     console.error(error);
@@ -333,4 +376,5 @@ router.get("/:id/key", auth, async (req, res) => {
     });
   }
 });
+
 export default router;
