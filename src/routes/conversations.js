@@ -205,7 +205,10 @@ router.patch("/messages/:id", auth, async (req, res) => {
       },
     });
     const io = req.app.get("io");
-    io.to(String(message.conversationId)).emit("message-updated", updatedMessage);
+    io.to(String(message.conversationId)).emit(
+      "message-updated",
+      updatedMessage,
+    );
 
     return res.status(200).json(updatedMessage);
   } catch (error) {
@@ -243,6 +246,91 @@ router.delete("/messages/:id", auth, async (req, res) => {
     return res.status(200).json(deletedMessage);
   } catch (error) {
     return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/:id/key/:userId", auth, async (req, res) => {
+  try {
+    const conversationId = parseInt(req.params.id);
+    const userId = parseInt(req.params.userId);
+    const { encryptedKey, nonce } = req.body;
+
+    if (!encryptedKey || !nonce)
+      return res.status(400).json({
+        error: "encryptedKey and nonce are required",
+      });
+
+    const conversationMember = await prisma.conversationMember.findUnique({
+      where: {
+        conversationId_userId: {
+          conversationId,
+          userId: req.userId,
+        },
+      },
+    });
+
+    if (!conversationMember) {
+      return res.status(403).json({
+        error: "You are not a member of this conversation",
+      });
+    }
+
+    await prisma.conversationMember.update({
+      where: {
+        conversationId_userId: {
+          conversationId,
+          userId,
+        },
+      },
+      data: {
+        encryptedConversationKey: encryptedKey,
+        nonce: nonce,
+      },
+    });
+    return res.status(200).json({
+      message: "Conversation key stored successfully",
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Internal server error",
+    });
+  }
+});
+
+router.get("/:id/key", auth, async (req, res) => {
+  try {
+    const conversationId = parseInt(req.params.id);
+    const userId = req.userId;
+    const result = await prisma.conversationMember.findUnique({
+      where: {
+        conversationId_userId: {
+          conversationId: conversationId,
+          userId: userId,
+        },
+      },
+      select: {
+        encryptedConversationKey: true,
+        nonce: true,
+      },
+    });
+
+    if (!result)
+      return res.status(403).json({
+        error: "You are not a member of this conversation",
+      });
+
+    return res.status(200).json({
+      encryptedConversationKey: result.encryptedConversationKey,
+      nonce: result.nonce,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Internal server error",
+    });
   }
 });
 export default router;

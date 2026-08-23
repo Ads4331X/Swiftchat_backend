@@ -46,6 +46,8 @@ model ConversationMember {
   userId         Int
   conversation   Conversation @relation(fields: [conversationId], references: [id])
   user           User         @relation(fields: [userId], references: [id])
+  encryptedConversationKey String?
+  nonce String?
 
   @@unique([conversationId, userId])
 }
