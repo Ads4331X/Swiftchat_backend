@@ -23,7 +23,13 @@ router.get("/", auth, async (req, res) => {
         messages: {
           orderBy: { sentAt: "desc" },
           take: 1,
-          select: { id: true, text: true, sentAt: true, senderId: true },
+          select: {
+            id: true,
+            text: true,
+            sentAt: true,
+            senderId: true,
+            nonce: true,
+          },
         },
       },
     });
