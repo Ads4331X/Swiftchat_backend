@@ -7,7 +7,8 @@ import {
   validatePassword,
   validatePasswordMatch,
 } from "../validators/auth.validator.js";
-import bcrypt from "bcryptjs";
+import bcrypt, { genSalt } from "bcryptjs";
+import { error } from "node:console";
 
 const router = express.Router();
 
@@ -312,4 +313,76 @@ router.get("/:userId/public-key", auth, async (req, res) => {
     });
   }
 });
+
+router.get("/key-backup", auth, async (req, res) => {
+  try {
+    const key = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: {
+        keyBackupEncrypted: true,
+        keyBackupNonce: true,
+        keyBackupSalt: true,
+      },
+    });
+
+    if (!key || !key.keyBackupEncrypted) {
+      return res
+        .status(404)
+        .json({ error: "No key backup found for this user" });
+    }
+
+    return res.status(200).json({
+      keyBackupEncrypted: key.keyBackupEncrypted,
+      keyBackupNonce: key.keyBackupNonce,
+      keyBackupSalt: key.keyBackupSalt,
+    });
+  } catch (err) {
+    console.error("Error fetching key backup:", err);
+    return res.status(500).json({ error: "Failed to fetch key backup" });
+  }
+});
+
+router.put("/key-backup", auth, async (req, res) => {
+  try {
+    const {
+      keyBackupEncrypted: encryptedPrivateKey,
+      keyBackupNonce: nonce,
+      keyBackupSalt: salt,
+    } = req.body;
+
+    if (!encryptedPrivateKey || !nonce || !salt) {
+      return res.status(400).json({
+        error: "key is required",
+      });
+    }
+
+    await prisma.user.update({
+      where: {
+        id: req.userId,
+      },
+      data: {
+        keyBackupEncrypted: encryptedPrivateKey,
+        keyBackupNonce: nonce,
+        keyBackupSalt: salt,
+      },
+    });
+
+    return res.status(200).json({
+      message: "Backup key saved",
+    });
+  } catch (err) {
+    if (err?.code === "P2025") {
+      return res.status(404).json({
+        error: "User not found",
+      });
+    }
+
+    console.error(err);
+
+    return res.status(500).json({
+      error: "Internal server error",
+    });
+  }
+});
+
 export default router;

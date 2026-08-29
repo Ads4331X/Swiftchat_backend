@@ -16,6 +16,9 @@ model User {
   updated_at          DateTime             @updatedAt
   avatar              String               @default("")
   publicKey           String?
+  keyBackupEncrypted   String?
+  keyBackupNonce       String?
+  keyBackupSalt        String?
   conversationMembers ConversationMember[]
   messages            Message[]
   passwordResetTokens PasswordResetToken[]
