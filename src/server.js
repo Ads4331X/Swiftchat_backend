@@ -43,6 +43,8 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`- Local:   http://localhost:${PORT}`);
+  console.log(`- Network: http://192.168.1.72:${PORT}`);
 });
