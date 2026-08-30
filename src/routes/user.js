@@ -322,6 +322,9 @@ router.get("/key-backup", auth, async (req, res) => {
         keyBackupEncrypted: true,
         keyBackupNonce: true,
         keyBackupSalt: true,
+        keyBackupOpsLimit: true,
+        keyBackupMemLimit: true,
+        keyBackupAlg: true,
       },
     });
 
@@ -335,6 +338,11 @@ router.get("/key-backup", auth, async (req, res) => {
       keyBackupEncrypted: key.keyBackupEncrypted,
       keyBackupNonce: key.keyBackupNonce,
       keyBackupSalt: key.keyBackupSalt,
+      // KDF/encryption parameters are non-secret metadata; the server only
+      // stores them so the client can re-derive the key during recovery.
+      keyBackupOpsLimit: key.keyBackupOpsLimit,
+      keyBackupMemLimit: key.keyBackupMemLimit,
+      keyBackupAlg: key.keyBackupAlg,
     });
   } catch (err) {
     console.error("Error fetching key backup:", err);
@@ -348,6 +356,9 @@ router.put("/key-backup", auth, async (req, res) => {
       keyBackupEncrypted: encryptedPrivateKey,
       keyBackupNonce: nonce,
       keyBackupSalt: salt,
+      keyBackupOpsLimit: opsLimit,
+      keyBackupMemLimit: memLimit,
+      keyBackupAlg: alg,
     } = req.body;
 
     if (!encryptedPrivateKey || !nonce || !salt) {
@@ -364,6 +375,10 @@ router.put("/key-backup", auth, async (req, res) => {
         keyBackupEncrypted: encryptedPrivateKey,
         keyBackupNonce: nonce,
         keyBackupSalt: salt,
+        keyBackupOpsLimit:
+          typeof opsLimit === "number" ? opsLimit : undefined,
+        keyBackupMemLimit: typeof memLimit === "number" ? memLimit : undefined,
+        keyBackupAlg: typeof alg === "number" ? alg : undefined,
       },
     });
 

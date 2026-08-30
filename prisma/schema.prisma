@@ -19,6 +19,9 @@ model User {
   keyBackupEncrypted   String?
   keyBackupNonce       String?
   keyBackupSalt        String?
+  keyBackupOpsLimit    Int?
+  keyBackupMemLimit    Int?
+  keyBackupAlg         Int?
   conversationMembers  ConversationMember[]
   messages             Message[]
   passwordResetTokens  PasswordResetToken[]
