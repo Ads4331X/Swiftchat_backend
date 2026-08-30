@@ -383,4 +383,107 @@ router.get("/:id/key", auth, async (req, res) => {
   }
 });
 
+router.post("/messages/:conversationId/mark-read", auth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const conversationId = Number(req.params.conversationId);
+    const { messageId } = req.body;
+
+    if (!conversationId || !messageId) {
+      return res.status(400).json({
+        error: "conversationId and messageId are required",
+      });
+    }
+
+    const membership = await prisma.conversationMember.findUnique({
+      where: {
+        conversationId_userId: {
+          conversationId,
+          userId,
+        },
+      },
+    });
+
+    if (!membership) {
+      return res.status(403).json({
+        error: "You are not a member of this conversation",
+      });
+    }
+
+    const message = await prisma.message.findFirst({
+      where: {
+        id: messageId,
+        conversationId,
+      },
+      select: {
+        id: true,
+        senderId: true,
+        conversationId: true,
+      },
+    });
+
+    if (!message) {
+      return res.status(404).json({
+        error: "Message not found",
+      });
+    }
+
+    if (message.senderId === userId) {
+      return res.status(400).json({
+        error: "You cannot mark your own message as read",
+      });
+    }
+
+    const readAt = new Date();
+
+    const messages = await prisma.message.findMany({
+      where: {
+        conversationId,
+        id: {
+          lte: messageId,
+        },
+        senderId: {
+          not: userId,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    await prisma.messageRead.createMany({
+      data: messages.map((message) => ({
+        messageId: message.id,
+        userId,
+        conversationId,
+        readAt,
+      })),
+      skipDuplicates: true,
+    });
+
+    const io = req.app.get("io");
+
+    io.to(String(conversationId)).emit("mark-read", {
+      conversationId,
+      messageId,
+      userId,
+      readAt,
+    });
+
+    return res.status(200).json({
+      message: "Messages marked as read",
+      conversationId,
+      messageId,
+      userId,
+      readAt,
+    });
+  } catch (error) {
+    console.error("Mark read error:", error);
+
+    return res.status(500).json({
+      error: "Internal server error",
+    });
+  }
+});
+
 export default router;

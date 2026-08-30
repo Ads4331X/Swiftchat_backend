@@ -8,21 +8,22 @@ datasource db {
 }
 
 model User {
-  id                  Int                  @id @default(autoincrement())
-  username            String               @unique
-  email               String               @unique
-  password_hash       String
-  created_at          DateTime             @default(now())
-  updated_at          DateTime             @updatedAt
-  avatar              String               @default("")
-  publicKey           String?
+  id                   Int                  @id @default(autoincrement())
+  username             String               @unique
+  email                String               @unique
+  password_hash        String
+  created_at           DateTime             @default(now())
+  updated_at           DateTime             @updatedAt
+  avatar               String               @default("")
+  publicKey            String?
   keyBackupEncrypted   String?
   keyBackupNonce       String?
   keyBackupSalt        String?
-  conversationMembers ConversationMember[]
-  messages            Message[]
-  passwordResetTokens PasswordResetToken[]
+  conversationMembers  ConversationMember[]
+  messages             Message[]
+  passwordResetTokens  PasswordResetToken[]
   conversationsCreated Conversation[]
+  messageReads         MessageRead[]
 }
 
 model PasswordResetToken {
@@ -38,13 +39,14 @@ model PasswordResetToken {
 }
 
 model Conversation {
-  id          Int                  @id @default(autoincrement())
-  createdAt   DateTime             @default(now())
+  id          Int      @id @default(autoincrement())
+  createdAt   DateTime @default(now())
   createdById Int
-  creator     User                 @relation(fields: [createdById], references: [id])
+  creator     User     @relation(fields: [createdById], references: [id])
 
-  members  ConversationMember[]
-  messages Message[]
+  members      ConversationMember[]
+  messages     Message[]
+  messageReads MessageRead[]
 }
 
 model ConversationMember {
@@ -60,16 +62,31 @@ model ConversationMember {
 }
 
 model Message {
-  id             Int          @id @default(autoincrement())
+  id             Int      @id @default(autoincrement())
   text           String // this is encrypted text ( message)
   nonce          String
   conversationId Int
   senderId       Int
-  editedAt       DateTime     @updatedAt
-  sentAt         DateTime     @default(now())
+  editedAt       DateTime @updatedAt
+  sentAt         DateTime @default(now())
 
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
-  user           User         @relation(fields: [senderId], references: [id])
+  conversation Conversation  @relation(fields: [conversationId], references: [id])
+  user         User          @relation(fields: [senderId], references: [id])
+  messageReads MessageRead[]
 
   @@index([conversationId, sentAt])
+}
+
+model MessageRead {
+  id             Int      @id @default(autoincrement())
+  messageId      Int
+  userId         Int
+  conversationId Int
+  readAt         DateTime
+
+  message      Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
 }
