@@ -26,6 +26,22 @@ export async function findMessage(messageId) {
   });
 }
 
+export function validateMessageId(messageId, res) {
+  if (!Number.isInteger(messageId)) {
+    res.status(400).json({ error: "Invalid message ID" });
+    return true;
+  }
+  return false;
+}
+
+export function validateEmoji(emoji, res) {
+  if (!emoji || typeof emoji !== "string") {
+    res.status(400).json({ error: "Emoji is required" });
+    return true;
+  }
+  return false;
+}
+
 export function emitToConversation(io, conversationId, event, data) {
   io.to(String(conversationId)).emit(event, data);
 }

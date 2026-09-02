@@ -7,6 +7,8 @@ import {
   checkMembership,
   findMember,
   findMessage,
+  validateMessageId,
+  validateEmoji,
   emitToConversation,
   handleError,
 } from "../helpers/conversations.js";
@@ -465,19 +467,15 @@ router.post("/messages/:conversationId/mark-read", auth, async (req, res) => {
     });
   }
 });
+
 router.post("/messages/:id/reactions", auth, async (req, res) => {
   try {
     const { emoji } = req.body;
     const messageId = parseId(req.params.id);
     const userId = req.userId;
 
-    if (!Number.isInteger(messageId)) {
-      return res.status(400).json({ error: "Invalid message ID" });
-    }
-
-    if (!emoji || typeof emoji !== "string") {
-      return res.status(400).json({ error: "Emoji is required" });
-    }
+    if (validateMessageId(messageId, res)) return;
+    if (validateEmoji(emoji, res)) return;
 
     const message = await findMessage(messageId);
 
@@ -485,8 +483,17 @@ router.post("/messages/:id/reactions", auth, async (req, res) => {
       return res.status(404).json({ error: "Message not found" });
     }
 
-    const reaction = await prisma.messageReaction.create({
-      data: {
+    const reaction = await prisma.messageReaction.upsert({
+      where: {
+        messageId_userId: {
+          messageId: message.id,
+          userId,
+        },
+      },
+      update: {
+        emoji,
+      },
+      create: {
         userId,
         messageId: message.id,
         emoji,
@@ -508,14 +515,60 @@ router.post("/messages/:id/reactions", auth, async (req, res) => {
   }
 });
 
-router.delete("/messages/:id/reactions", auth, async (req, res) => {
+router.put("/messages/:id/reactions", auth, async (req, res) => {
   try {
+    const { emoji } = req.body;
     const messageId = parseId(req.params.id);
     const userId = req.userId;
 
-    if (!Number.isInteger(messageId)) {
-      return res.status(400).json({ error: "Invalid message ID" });
+    if (validateMessageId(messageId, res)) return;
+    if (validateEmoji(emoji, res)) return;
+
+    const message = await findMessage(messageId);
+
+    if (!message) {
+      return res.status(404).json({ error: "Message not found" });
     }
+
+    const reaction = await prisma.messageReaction.upsert({
+      where: {
+        messageId_userId: {
+          messageId: message.id,
+          userId,
+        },
+      },
+      update: {
+        emoji,
+      },
+      create: {
+        userId,
+        messageId: message.id,
+        emoji,
+      },
+    });
+
+    const io = req.app.get("io");
+    emitToConversation(io, message.conversationId, "message-reaction-update", {
+      messageId: message.id,
+      userId: userId,
+      emoji: emoji,
+      removed: false,
+    });
+
+    return res.status(200).json(reaction);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to add reaction" });
+  }
+});
+
+router.delete("/messages/:id/reactions", auth, async (req, res) => {
+  try {
+    const { emoji } = req.body;
+    const messageId = parseId(req.params.id);
+    const userId = req.userId;
+
+    if (validateMessageId(messageId, res)) return;
 
     const message = await findMessage(messageId);
 
