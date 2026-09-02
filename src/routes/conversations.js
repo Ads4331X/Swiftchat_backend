@@ -1,6 +1,15 @@
 import * as express from "express";
 import auth from "../middleware/auth.js";
 import prisma from "../prisma.js";
+import {
+  parseId,
+  normalizeNonce,
+  checkMembership,
+  findMember,
+  findMessage,
+  emitToConversation,
+  handleError,
+} from "../helpers/conversations.js";
 
 const router = express.Router();
 
@@ -51,7 +60,7 @@ router.get("/", auth, async (req, res) => {
 
     return res.json(cleaned);
   } catch (error) {
-    return res.status(500).json({ error: "Internal server error" });
+    return handleError(res);
   }
 });
 
@@ -109,16 +118,14 @@ router.post("/new-conversation", auth, async (req, res) => {
       conversation: newConversation,
     });
   } catch (error) {
-    return res.status(500).json({ error: "Internal server error" });
+    return handleError(res);
   }
 });
 router.get("/messages/:conversationId", auth, async (req, res) => {
   try {
-    const conversationId = parseInt(req.params.conversationId);
+    const conversationId = parseId(req.params.conversationId);
 
-    const membership = await prisma.conversationMember.findFirst({
-      where: { conversationId: conversationId, userId: req.userId },
-    });
+    const membership = await checkMembership(conversationId, req.userId);
 
     if (!membership)
       return res
@@ -151,14 +158,14 @@ router.get("/messages/:conversationId", auth, async (req, res) => {
 
     return res.status(200).json(messages);
   } catch (error) {
-    return res.status(500).json({ error: "Internal server error" });
+    return handleError(res);
   }
 });
 
 router.post("/messages", auth, async (req, res) => {
   try {
     const { messageText, conversationId: rawConversationId, nonce } = req.body;
-    const conversationId = parseInt(rawConversationId);
+    const conversationId = parseId(rawConversationId);
     const senderId = req.userId;
 
     if (!messageText || !nonce || Number.isNaN(conversationId)) {
@@ -167,12 +174,9 @@ router.post("/messages", auth, async (req, res) => {
       });
     }
 
-    const normalizedNonce =
-      typeof nonce === "string" ? nonce : Buffer.from(nonce).toString("base64");
+    const normalizedNonce = normalizeNonce(nonce);
 
-    const membership = await prisma.conversationMember.findFirst({
-      where: { conversationId: conversationId, userId: senderId },
-    });
+    const membership = await checkMembership(conversationId, senderId);
 
     if (!membership)
       return res.status(403).json({
@@ -189,17 +193,17 @@ router.post("/messages", auth, async (req, res) => {
     });
 
     const io = req.app.get("io");
-    io.to(String(conversationId)).emit("new-message", message);
+    emitToConversation(io, conversationId, "new-message", message);
 
     return res.status(201).json(message);
   } catch (error) {
-    return res.status(500).json({ error: "Internal server error" });
+    return handleError(res);
   }
 });
 
 router.patch("/messages/:id", auth, async (req, res) => {
   try {
-    const messageId = parseInt(req.params.id);
+    const messageId = parseId(req.params.id);
     const { text, nonce } = req.body;
 
     if (!text || !nonce || Number.isNaN(messageId)) {
@@ -208,12 +212,9 @@ router.patch("/messages/:id", auth, async (req, res) => {
       });
     }
 
-    const normalizedNonce =
-      typeof nonce === "string" ? nonce : Buffer.from(nonce).toString("base64");
+    const normalizedNonce = normalizeNonce(nonce);
 
-    const message = await prisma.message.findUnique({
-      where: { id: messageId },
-    });
+    const message = await findMessage(messageId);
 
     if (!message) {
       return res.status(404).json({ error: "Message not found" });
@@ -233,24 +234,24 @@ router.patch("/messages/:id", auth, async (req, res) => {
       },
     });
     const io = req.app.get("io");
-    io.to(String(message.conversationId)).emit(
+    emitToConversation(
+      io,
+      message.conversationId,
       "message-updated",
       updatedMessage,
     );
 
     return res.status(200).json(updatedMessage);
   } catch (error) {
-    return res.status(500).json({ error: "Internal server error" });
+    return handleError(res);
   }
 });
 
 router.delete("/messages/:id", auth, async (req, res) => {
   try {
-    const messageId = parseInt(req.params.id);
+    const messageId = parseId(req.params.id);
 
-    const message = await prisma.message.findUnique({
-      where: { id: messageId },
-    });
+    const message = await findMessage(messageId);
 
     if (!message) {
       return res.status(404).json({ error: "Message not found" });
@@ -267,20 +268,20 @@ router.delete("/messages/:id", auth, async (req, res) => {
     });
 
     const io = req.app.get("io");
-    io.to(String(message.conversationId)).emit("message-deleted", {
+    emitToConversation(io, message.conversationId, "message-deleted", {
       id: messageId,
     });
 
     return res.status(200).json(deletedMessage);
   } catch (error) {
-    return res.status(500).json({ error: "Internal server error" });
+    return handleError(res);
   }
 });
 
 router.put("/:id/key/:userId", auth, async (req, res) => {
   try {
-    const conversationId = parseInt(req.params.id);
-    const userId = parseInt(req.params.userId);
+    const conversationId = parseId(req.params.id);
+    const userId = parseId(req.params.userId);
     const { encryptedKey, nonce } = req.body;
 
     if (!encryptedKey || !nonce)
@@ -288,28 +289,14 @@ router.put("/:id/key/:userId", auth, async (req, res) => {
         error: "encryptedKey and nonce are required",
       });
 
-    const conversationMember = await prisma.conversationMember.findUnique({
-      where: {
-        conversationId_userId: {
-          conversationId,
-          userId: req.userId,
-        },
-      },
-    });
+    const conversationMember = await findMember(conversationId, req.userId);
 
     if (!conversationMember) {
       return res.status(403).json({
         error: "You are not a member of this conversation",
       });
     }
-    const targetMember = await prisma.conversationMember.findUnique({
-      where: {
-        conversationId_userId: {
-          conversationId,
-          userId,
-        },
-      },
-    });
+    const targetMember = await findMember(conversationId, userId);
 
     if (!targetMember) {
       return res.status(404).json({
@@ -342,7 +329,7 @@ router.put("/:id/key/:userId", auth, async (req, res) => {
 });
 router.get("/:id/key", auth, async (req, res) => {
   try {
-    const conversationId = parseInt(req.params.id);
+    const conversationId = parseId(req.params.id);
     const userId = req.userId;
 
     const result = await prisma.conversationMember.findUnique({
@@ -395,14 +382,7 @@ router.post("/messages/:conversationId/mark-read", auth, async (req, res) => {
       });
     }
 
-    const membership = await prisma.conversationMember.findUnique({
-      where: {
-        conversationId_userId: {
-          conversationId,
-          userId,
-        },
-      },
-    });
+    const membership = await findMember(conversationId, userId);
 
     if (!membership) {
       return res.status(403).json({
@@ -463,7 +443,7 @@ router.post("/messages/:conversationId/mark-read", auth, async (req, res) => {
 
     const io = req.app.get("io");
 
-    io.to(String(conversationId)).emit("mark-read", {
+    emitToConversation(io, conversationId, "mark-read", {
       conversationId,
       messageId,
       userId,
@@ -482,6 +462,89 @@ router.post("/messages/:conversationId/mark-read", auth, async (req, res) => {
 
     return res.status(500).json({
       error: "Internal server error",
+    });
+  }
+});
+router.post("/messages/:id/reactions", auth, async (req, res) => {
+  try {
+    const { emoji } = req.body;
+    const messageId = parseId(req.params.id);
+    const userId = req.userId;
+
+    if (!Number.isInteger(messageId)) {
+      return res.status(400).json({ error: "Invalid message ID" });
+    }
+
+    if (!emoji || typeof emoji !== "string") {
+      return res.status(400).json({ error: "Emoji is required" });
+    }
+
+    const message = await findMessage(messageId);
+
+    if (!message) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    const reaction = await prisma.messageReaction.create({
+      data: {
+        userId,
+        messageId: message.id,
+        emoji,
+      },
+    });
+
+    const io = req.app.get("io");
+    emitToConversation(io, message.conversationId, "message-reaction", {
+      messageId: message.id,
+      userId: userId,
+      emoji: emoji,
+      removed: false,
+    });
+
+    return res.status(201).json(reaction);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to add reaction" });
+  }
+});
+
+router.delete("/messages/:id/reactions", auth, async (req, res) => {
+  try {
+    const messageId = parseId(req.params.id);
+    const userId = req.userId;
+
+    if (!Number.isInteger(messageId)) {
+      return res.status(400).json({ error: "Invalid message ID" });
+    }
+
+    const message = await findMessage(messageId);
+
+    if (!message) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    const deletedReaction = await prisma.messageReaction.delete({
+      where: {
+        messageId_userId: {
+          messageId: message.id,
+          userId,
+        },
+      },
+    });
+    const io = req.app.get("io");
+    emitToConversation(io, message.conversationId, "message-reaction", {
+      messageId: message.id,
+      userId: userId,
+      emoji: emoji,
+      removed: true,
+    });
+
+    return res.status(200).json(deletedReaction);
+  } catch (error) {
+    console.error(error);
+
+    return res.status(404).json({
+      error: "Reaction not found",
     });
   }
 });

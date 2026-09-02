@@ -7,8 +7,7 @@ import {
   validatePassword,
   validatePasswordMatch,
 } from "../validators/auth.validator.js";
-import bcrypt, { genSalt } from "bcryptjs";
-import { error } from "node:console";
+import bcrypt from "bcryptjs";
 
 const router = express.Router();
 
@@ -375,8 +374,7 @@ router.put("/key-backup", auth, async (req, res) => {
         keyBackupEncrypted: encryptedPrivateKey,
         keyBackupNonce: nonce,
         keyBackupSalt: salt,
-        keyBackupOpsLimit:
-          typeof opsLimit === "number" ? opsLimit : undefined,
+        keyBackupOpsLimit: typeof opsLimit === "number" ? opsLimit : undefined,
         keyBackupMemLimit: typeof memLimit === "number" ? memLimit : undefined,
         keyBackupAlg: typeof alg === "number" ? alg : undefined,
       },
@@ -398,6 +396,10 @@ router.put("/key-backup", auth, async (req, res) => {
       error: "Internal server error",
     });
   }
+});
+
+router.get("/:id", auth, async (req, res) => {
+  const targetedUserId = parseInt(req.params.id);
 });
 
 export default router;

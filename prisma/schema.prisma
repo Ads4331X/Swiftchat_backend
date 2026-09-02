@@ -14,6 +14,7 @@ model User {
   password_hash        String
   created_at           DateTime             @default(now())
   updated_at           DateTime             @updatedAt
+  lastSeen             DateTime?
   avatar               String               @default("")
   publicKey            String?
   keyBackupEncrypted   String?
@@ -24,6 +25,7 @@ model User {
   keyBackupAlg         Int?
   conversationMembers  ConversationMember[]
   messages             Message[]
+  reactions            MessageReaction[]
   passwordResetTokens  PasswordResetToken[]
   conversationsCreated Conversation[]
   messageReads         MessageRead[]
@@ -65,19 +67,33 @@ model ConversationMember {
 }
 
 model Message {
-  id             Int      @id @default(autoincrement())
+  id             Int               @id @default(autoincrement())
   text           String // this is encrypted text ( message)
   nonce          String
   conversationId Int
   senderId       Int
-  editedAt       DateTime @updatedAt
-  sentAt         DateTime @default(now())
+  editedAt       DateTime          @updatedAt
+  sentAt         DateTime          @default(now())
+  reactions      MessageReaction[]
 
   conversation Conversation  @relation(fields: [conversationId], references: [id])
   user         User          @relation(fields: [senderId], references: [id])
   messageReads MessageRead[]
 
   @@index([conversationId, sentAt])
+}
+
+model MessageReaction {
+  id Int @id @default(autoincrement())
+
+  messageId Int
+  userId    Int
+  emoji     String
+
+  message Message @relation(fields: [messageId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([messageId, userId])
 }
 
 model MessageRead {
