@@ -154,6 +154,14 @@ router.get("/messages/:conversationId", auth, async (req, res) => {
         sentAt: "desc",
       },
       take: limit,
+      include: {
+        reactions: {
+          select: {
+            emoji: true,
+            user: { select: { id: true } },
+          },
+        },
+      },
     });
 
     messages.reverse();
@@ -502,6 +510,7 @@ router.post("/messages/:id/reactions", auth, async (req, res) => {
 
     const io = req.app.get("io");
     emitToConversation(io, message.conversationId, "message-reaction", {
+      conversationId: message.conversationId,
       messageId: message.id,
       userId: userId,
       emoji: emoji,
@@ -549,6 +558,7 @@ router.put("/messages/:id/reactions", auth, async (req, res) => {
 
     const io = req.app.get("io");
     emitToConversation(io, message.conversationId, "message-reaction-update", {
+      conversationId: message.conversationId,
       messageId: message.id,
       userId: userId,
       emoji: emoji,
@@ -586,6 +596,7 @@ router.delete("/messages/:id/reactions", auth, async (req, res) => {
     });
     const io = req.app.get("io");
     emitToConversation(io, message.conversationId, "message-reaction", {
+      conversationId: message.conversationId,
       messageId: message.id,
       userId: userId,
       emoji: emoji,
