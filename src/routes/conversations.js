@@ -613,4 +613,38 @@ router.delete("/messages/:id/reactions", auth, async (req, res) => {
   }
 });
 
+router.post("/group", auth, async (req, res) => {
+  try {
+    const { name, membersId } = req.body;
+    const userId = req.userId;
+
+    if (!membersId || membersId.length < 1) {
+      return res.status(400).json({
+        error: "It is still 1 to 1 conversation",
+      });
+    }
+
+    const group = await prisma.conversation.create({
+      data: {
+        createdById: userId,
+        name,
+        members: {
+          create: [
+            { userId: req.userId },
+            ...membersId.map((id) => ({ userId: id })),
+          ],
+        },
+      },
+    });
+
+    return res.status(201).json(group);
+  } catch (error) {
+    console.error("Error creating group:", error);
+
+    return res.status(500).json({
+      error: "Failed to create group",
+    });
+  }
+});
+
 export default router;

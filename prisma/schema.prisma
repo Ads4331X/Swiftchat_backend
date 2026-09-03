@@ -47,6 +47,7 @@ model Conversation {
   id          Int      @id @default(autoincrement())
   createdAt   DateTime @default(now())
   createdById Int
+  name        String?
   creator     User     @relation(fields: [createdById], references: [id])
 
   members      ConversationMember[]

@@ -399,7 +399,32 @@ router.put("/key-backup", auth, async (req, res) => {
 });
 
 router.get("/:id", auth, async (req, res) => {
-  const targetedUserId = parseInt(req.params.id);
+  try {
+    const targetedUserId = parseInt(req.params.id);
+
+    const targetedUser = await prisma.user.findUnique({
+      where: { id: targetedUserId },
+      select: {
+        id: true,
+        username: true,
+        avatar: true,
+        created_at: true,
+        lastSeen: true,
+      },
+    });
+
+    if (!targetedUser) {
+      return res.status(400).json({ error: "User not found" });
+    }
+
+    return res.status(200).json(targetedUser);
+  } catch (error) {
+    console.error("Error fetching user:", error);
+
+    return res.status(500).json({
+      error: "Internal server error",
+    });
+  }
 });
 
 export default router;
