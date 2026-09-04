@@ -53,6 +53,7 @@ router.get("/", auth, async (req, res) => {
 
     const cleaned = sorted.map((conv) => ({
       id: conv.id,
+      name: conv.name,
       createdById: conv.createdById,
       members: conv.members
         .map((m) => m.user)
@@ -155,6 +156,9 @@ router.get("/messages/:conversationId", auth, async (req, res) => {
       },
       take: limit,
       include: {
+        user: {
+          select: { id: true, username: true, avatar: true },
+        },
         reactions: {
           select: {
             emoji: true,
@@ -199,6 +203,16 @@ router.post("/messages", auth, async (req, res) => {
         senderId: senderId,
         text: messageText,
         nonce: normalizedNonce,
+      },
+      include: {
+        reactions: {
+          select: {
+            emoji: true,
+            user: {
+              select: { id: true },
+            },
+          },
+        },
       },
     });
 
