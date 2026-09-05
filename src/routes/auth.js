@@ -15,8 +15,10 @@ const router = Router();
 
 router.post("/register", async (req, res) => {
   try {
+    // gets the user details
     const { username, email, password, confirmPassword } = req.body;
 
+    // check if user details are validate
     const result = validateRegister({
       username,
       email,
@@ -30,8 +32,10 @@ router.post("/register", async (req, res) => {
       });
     }
 
+    // hash the password
     const passwordHash = await bcrypt.hash(result.data.password, 12);
 
+    // creates a new user (regesters a user)
     const user = await prisma.user.create({
       data: {
         username: result.data.username,
@@ -64,29 +68,40 @@ router.post("/register", async (req, res) => {
 
 router.post("/login", async (req, res) => {
   try {
+    // gets the user details for login
     const { email, password } = req.body;
 
+    // check if the user details are empty
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password are required" });
     }
 
+    // normalize the email by triming and converting to lowercase
     const normalizedEmail = email.trim().toLowerCase();
+
+    // check if user email exists or not
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
     });
 
     if (!user) {
-      console.warn(`[AUTH] Login failed: User not found for email '${normalizedEmail}'`);
+      console.warn(
+        `[AUTH] Login failed: User not found for email '${normalizedEmail}'`,
+      );
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
+    // checks if the password matches or not ( it hashes the password and compares it with the hashed pasword in the db)
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatch) {
-      console.warn(`[AUTH] Login failed: Password mismatch for email '${normalizedEmail}'`);
+      console.warn(
+        `[AUTH] Login failed: Password mismatch for email '${normalizedEmail}'`,
+      );
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
+    // create a jwt token
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
@@ -119,11 +134,13 @@ const verifyOtpLimiter = rateLimit({
 
 router.post("/forgot-password", otpLimiter, async (req, res) => {
   try {
+    // gets the user details and check if it is validate
     const { email } = req.body;
     const result = validateEmail(email);
 
     if (result.error) return res.status(400).json({ error: result.error });
 
+    // check if user exists
     const user = await prisma.user.findUnique({
       where: { email: result.data },
       select: {
@@ -142,15 +159,18 @@ router.post("/forgot-password", otpLimiter, async (req, res) => {
       });
     }
 
+    // generate a opt
     const otp = crypto
       .randomInt(0, 1000000)
       .toString()
       .padStart(6, "0")
       .toString();
 
+    // hash the otp and creates a expire time limit 5min
     const hashOtp = await bcrypt.hash(otp, 10);
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
+    // message to send in email
     const fullMessage = [
       `Hello ${user.username},`,
       "",
@@ -212,7 +232,10 @@ router.post("/forgot-password", otpLimiter, async (req, res) => {
 
 router.post("/verify-otp", verifyOtpLimiter, async (req, res) => {
   try {
+    // gets the email and otp form user details
     const { email, otp } = req.body;
+
+    // check if user exists
     const user = await prisma.user.findUnique({
       where: { email: email?.trim().toLowerCase() },
       select: { id: true },
@@ -223,7 +246,8 @@ router.post("/verify-otp", verifyOtpLimiter, async (req, res) => {
       return res.status(400).json({ error: "Invalid or expired code" });
     }
 
-    const token = await prisma.PasswordResetToken.findFirst({
+    // find the latest valid password reset token for the user
+    const token = await prisma.passwordResetToken.findFirst({
       where: {
         userId: user.id,
         usedAt: null,
@@ -232,6 +256,7 @@ router.post("/verify-otp", verifyOtpLimiter, async (req, res) => {
       orderBy: { createdAt: "desc" },
     });
 
+    // check if the token is valid or not by comparing it with the hash otp
     const valid = token ? await bcrypt.compare(otp, token.tokenHash) : false;
     if (!valid) {
       return res.status(400).json({ error: "Invalid or expired code" });
@@ -247,6 +272,7 @@ router.post("/verify-otp", verifyOtpLimiter, async (req, res) => {
 
 router.post("/reset-password", verifyOtpLimiter, async (req, res) => {
   try {
+    // gets the user details and check if its validate
     const { email, otp, newPassword, confirmNewPassword } = req.body;
 
     const emailResult = validateEmail(email);
@@ -261,6 +287,7 @@ router.post("/reset-password", verifyOtpLimiter, async (req, res) => {
     if (matchResult.error)
       return res.status(400).json({ error: matchResult.error });
 
+    // check if user exists
     const user = await prisma.user.findUnique({
       where: { email: emailResult.data },
       select: { id: true },
@@ -270,7 +297,8 @@ router.post("/reset-password", verifyOtpLimiter, async (req, res) => {
       return res.status(400).json({ error: "Invalid or expired code" });
     }
 
-    const token = await prisma.PasswordResetToken.findFirst({
+    // find the latest unused and non-expired password reset token and verify the OTP
+    const token = await prisma.passwordResetToken.findFirst({
       where: {
         userId: user.id,
         usedAt: null,
@@ -279,13 +307,16 @@ router.post("/reset-password", verifyOtpLimiter, async (req, res) => {
       orderBy: { createdAt: "desc" },
     });
 
+    // check if the token is valid or not by comparing it with the hash otp
     const valid = token ? await bcrypt.compare(otp, token.tokenHash) : false;
     if (!valid) {
       return res.status(400).json({ error: "Invalid or expired code" });
     }
 
+    // hash the password
     const passwordHash = await bcrypt.hash(passwordResult.data, 12);
 
+    // update the password and mark the reset token as used in a single transaction
     await prisma.$transaction([
       prisma.user.update({
         where: { id: user.id },

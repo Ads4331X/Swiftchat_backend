@@ -13,6 +13,7 @@ const router = express.Router();
 
 router.get("/user-details", auth, async (req, res) => {
   try {
+    // gets the user details
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
       select: {
@@ -22,6 +23,7 @@ router.get("/user-details", auth, async (req, res) => {
       },
     });
 
+    // check if user exists or not
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -35,18 +37,22 @@ router.get("/user-details", auth, async (req, res) => {
 
 router.patch("/update-user-info", auth, async (req, res) => {
   try {
+    // gets the user details to update
     const { username, email } = req.body;
 
+    // check if the username is validate or not
     const usernameResult = validateUsername(username);
     if (usernameResult.error) {
       return res.status(400).json({ error: usernameResult.error });
     }
 
+    // check if the email is validate or not
     const emailResult = validateEmail(email);
     if (emailResult.error) {
       return res.status(400).json({ error: emailResult.error });
     }
 
+    // updates the user details
     const updatedUser = await prisma.user.update({
       where: { id: req.userId },
       data: {
@@ -58,6 +64,7 @@ router.patch("/update-user-info", auth, async (req, res) => {
 
     return res.json(updatedUser);
   } catch (err) {
+    // Handle duplicate username/email (unique constraints)
     if (err?.code === "P2002") {
       // Prisma 7 with adapter-pg nests the constraint fields here
       const fields =
@@ -79,12 +86,15 @@ router.patch("/update-user-info", auth, async (req, res) => {
 
 router.post("/verify-password", auth, async (req, res) => {
   try {
+    // gets the current password from the user
     const { currentPassword } = req.body;
 
+    // check if the password is empty or not
     if (!currentPassword) {
       return res.status(400).json({ error: "Current password is required" });
     }
 
+    // check if user exists
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
       select: { password_hash: true },
@@ -94,6 +104,7 @@ router.post("/verify-password", auth, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    // check if the current password matches or not
     const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
 
     if (!isMatch) {
@@ -109,12 +120,15 @@ router.post("/verify-password", auth, async (req, res) => {
 
 router.patch("/change-password", auth, async (req, res) => {
   try {
+    // gets the password details from the user
     const { currentPassword, newPassword, confirmNewPassword } = req.body;
 
+    // check if the current password is empty or not
     if (!currentPassword) {
       return res.status(400).json({ error: "Current password is required" });
     }
 
+    // check if user exists
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
       select: { password_hash: true },
@@ -124,6 +138,7 @@ router.patch("/change-password", auth, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    // check if the current password matches or not
     const currentMatch = await bcrypt.compare(
       currentPassword,
       user.password_hash,
@@ -132,18 +147,22 @@ router.patch("/change-password", auth, async (req, res) => {
       return res.status(401).json({ error: "Current password is incorrect" });
     }
 
+    // check if the new password is validate or not
     const newPasswordValidate = validatePassword(newPassword);
     if (newPasswordValidate.error) {
       return res.status(400).json({ error: newPasswordValidate.error });
     }
 
+    // check if both the new passwords match or not
     const isMatch = validatePasswordMatch(newPassword, confirmNewPassword);
     if (isMatch.error) {
       return res.status(400).json({ error: isMatch.error });
     }
 
+    // hash the new password
     const passwordHash = await bcrypt.hash(newPassword, 12);
 
+    // updates the user password
     await prisma.user.update({
       where: { id: req.userId },
       data: { password_hash: passwordHash },
@@ -158,14 +177,17 @@ router.patch("/change-password", auth, async (req, res) => {
 
 router.get("/search", auth, async (req, res) => {
   try {
+    // gets the username to search
     const { username } = req.query;
 
+    // check if the username is empty or not
     if (!username?.trim()) {
       return res.status(400).json({
         error: "Username is required",
       });
     }
 
+    // search users by username and exclude the current user
     const users = await prisma.user.findMany({
       where: {
         username: {
@@ -199,17 +221,22 @@ router.get("/search", auth, async (req, res) => {
 
 router.delete("/account", auth, async (req, res) => {
   try {
+    // gets all the conversations the user is a member of
     const memberships = await prisma.conversationMember.findMany({
       where: { userId: req.userId },
       select: { conversationId: true },
     });
     const conversationIds = memberships.map((m) => m.conversationId);
 
+    // delete all the user data in a single transaction
     await prisma.$transaction(async (tx) => {
+      // deletes all the messages sent by the user
       await tx.message.deleteMany({ where: { senderId: req.userId } });
 
+      // removes the user from all the conversations
       await tx.conversationMember.deleteMany({ where: { userId: req.userId } });
 
+      // find conversations that are now empty and delete them
       if (conversationIds.length > 0) {
         const remaining = await tx.conversationMember.findMany({
           where: { conversationId: { in: conversationIds } },
@@ -220,6 +247,7 @@ router.delete("/account", auth, async (req, res) => {
           (id) => !active.has(id),
         );
 
+        // delete the empty conversations and their messages
         if (emptyConversationIds.length > 0) {
           await tx.message.deleteMany({
             where: { conversationId: { in: emptyConversationIds } },
@@ -230,6 +258,7 @@ router.delete("/account", auth, async (req, res) => {
         }
       }
 
+      // deletes the user account
       await tx.user.delete({ where: { id: req.userId } });
     });
 
@@ -245,14 +274,17 @@ router.delete("/account", auth, async (req, res) => {
 
 router.put("/public-key", auth, async (req, res) => {
   try {
+    // gets the public key from the user
     const { publicKey } = req.body;
 
+    // check if the public key is empty or not
     if (!publicKey) {
       return res.status(400).json({
         error: "Public key is required",
       });
     }
 
+    // saves the public key for the user
     await prisma.user.update({
       where: {
         id: req.userId,
@@ -282,8 +314,10 @@ router.put("/public-key", auth, async (req, res) => {
 
 router.get("/:userId/public-key", auth, async (req, res) => {
   try {
+    // gets the targeted user id
     const targetedUserId = parseInt(req.params.userId);
 
+    // check if the targeted user exists or not
     const targetedUser = await prisma.user.findUnique({
       where: { id: targetedUserId },
       select: { publicKey: true },
@@ -295,6 +329,7 @@ router.get("/:userId/public-key", auth, async (req, res) => {
       });
     }
 
+    // check if the targeted user has a public key or not
     if (!targetedUser.publicKey) {
       return res.status(404).json({
         error: "Public key not found",
@@ -315,6 +350,7 @@ router.get("/:userId/public-key", auth, async (req, res) => {
 
 router.get("/key-backup", auth, async (req, res) => {
   try {
+    // gets the key backup details of the user
     const key = await prisma.user.findUnique({
       where: { id: req.userId },
       select: {
@@ -327,6 +363,7 @@ router.get("/key-backup", auth, async (req, res) => {
       },
     });
 
+    // check if the user has a key backup or not
     if (!key || !key.keyBackupEncrypted) {
       return res
         .status(404)
@@ -351,6 +388,7 @@ router.get("/key-backup", auth, async (req, res) => {
 
 router.put("/key-backup", auth, async (req, res) => {
   try {
+    // gets the key backup details from the user
     const {
       keyBackupEncrypted: encryptedPrivateKey,
       keyBackupNonce: nonce,
@@ -360,12 +398,14 @@ router.put("/key-backup", auth, async (req, res) => {
       keyBackupAlg: alg,
     } = req.body;
 
+    // check if the required fields are present or not
     if (!encryptedPrivateKey || !nonce || !salt) {
       return res.status(400).json({
         error: "key is required",
       });
     }
 
+    // saves the key backup for the user
     await prisma.user.update({
       where: {
         id: req.userId,
@@ -400,8 +440,10 @@ router.put("/key-backup", auth, async (req, res) => {
 
 router.get("/:id", auth, async (req, res) => {
   try {
+    // gets the targeted user id
     const targetedUserId = parseInt(req.params.id);
 
+    // check if the targeted user exists or not
     const targetedUser = await prisma.user.findUnique({
       where: { id: targetedUserId },
       select: {
