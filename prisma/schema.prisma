@@ -10,6 +10,7 @@ datasource db {
 model User {
   id                   Int                  @id @default(autoincrement())
   username             String               @unique
+  nickanme             String?
   email                String               @unique
   password_hash        String
   created_at           DateTime             @default(now())

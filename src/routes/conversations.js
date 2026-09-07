@@ -602,7 +602,7 @@ router.post("/:id/members", auth, async (req, res) => {
     if (!Array.isArray(userIds) || userIds.length === 0)
       return res.status(400).json({ error: "Invalid userIds send or null" });
 
-    // check if requester is a member
+    // check if the user is a member of the conversation or not
     const membership = await ensureMember(conversationId, req.userId, res);
     if (!membership) return;
 
@@ -633,18 +633,15 @@ router.post("/:id/members", auth, async (req, res) => {
   }
 });
 
-router.post(":id/members", auth, async (req, res) => {
+router.post("/:id/members/add", auth, async (req, res) => {
   try {
     // gets the required data ( userId and conversation id )
     const { userId } = req.body;
     const conversationId = parseId(req.params.id);
 
-    // check the one who is adding the user is admin of the group (conversation) or not
-    const conversation = await checkAdmin(conversationId, req.userId);
-
-    if (!conversation) {
-      return res.status(403).json({ error: "You are not the admin of the group" });
-    }
+    // check if the user is a member of the conversation or not
+    const membership = await ensureMember(conversationId, req.userId, res);
+    if (!membership) return;
 
     // check if the user exists or not
     const user = await findUser(userId);
@@ -735,14 +732,39 @@ router.patch("/:id", auth, async (req, res) => {
     // gets the conversation id
     const conversationId = parseId(req.params.id);
 
-    // check if the conversation exists (group exists or not)
-    const conversation = await checkAdmin(conversationId, req.userId);
+    // fetch the conversation with its members so we can tell
+    // whether this is a 1:1 and whether the user is a member
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: conversationId },
+      include: { members: { select: { userId: true } } },
+    });
 
     if (!conversation) {
-      return res.status(403).json({ error: "You are not the admin of the group" });
+      return res.status(404).json({ error: "Conversation not found" });
     }
 
-    // updates the name of the group (conversation)
+    const isMember = conversation.members.some(
+      (m) => m.userId === req.userId,
+    );
+
+    if (!isMember) {
+      return res
+        .status(403)
+        .json({ error: "You are not a member of this conversation" });
+    }
+
+    // any member of a 1:1 conversation can set a nickname,
+    // but groups can only be renamed by the admin
+    const isAdmin = conversation.createdById === req.userId;
+    const is1to1 = conversation.members.length === 2;
+
+    if (!isAdmin && !is1to1) {
+      return res
+        .status(403)
+        .json({ error: "You are not the admin of the group" });
+    }
+
+    // updates the name of the conversation
     const updatedConversation = await prisma.conversation.update({
       where: { id: conversationId },
       data: { name: trimmedName },
