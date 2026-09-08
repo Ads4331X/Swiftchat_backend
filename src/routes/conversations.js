@@ -91,7 +91,9 @@ router.post("/new-conversation", auth, async (req, res) => {
 
     // check if the target user is the current user or not
     if (targetedUser.id === req.userId)
-      return res.status(400).json({ error: "You can't create a group with yourself" });
+      return res
+        .status(400)
+        .json({ error: "You can't create a group with yourself" });
 
     // check if conversation already exists between these two users
     const existingConversation = await prisma.conversation.findFirst({
@@ -258,7 +260,12 @@ router.patch("/messages/:id", auth, async (req, res) => {
 
     // emits the updated message to all the members of the conversation
     const io = req.app.get("io");
-    emitToConversation(io, message.conversationId, "message-updated", updatedMessage);
+    emitToConversation(
+      io,
+      message.conversationId,
+      "message-updated",
+      updatedMessage,
+    );
 
     return res.status(200).json(updatedMessage);
   } catch (error) {
@@ -301,10 +308,16 @@ router.put("/:id/key/:userId", auth, async (req, res) => {
 
     // check if the required fields are present or not
     if (!encryptedKey || !nonce)
-      return res.status(400).json({ error: "encryptedKey and nonce are required" });
+      return res
+        .status(400)
+        .json({ error: "encryptedKey and nonce are required" });
 
     // check if requester is a member
-    const conversationMember = await ensureMember(conversationId, req.userId, res);
+    const conversationMember = await ensureMember(
+      conversationId,
+      req.userId,
+      res,
+    );
     if (!conversationMember) return;
 
     // check if target user is a member
@@ -326,7 +339,9 @@ router.put("/:id/key/:userId", auth, async (req, res) => {
       },
     });
 
-    return res.status(200).json({ message: "Conversation key stored successfully" });
+    return res
+      .status(200)
+      .json({ message: "Conversation key stored successfully" });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Internal server error" });
@@ -408,7 +423,9 @@ router.post("/messages/:conversationId/mark-read", auth, async (req, res) => {
 
     // check if the user is trying to mark their own message as read or not
     if (message.senderId === userId) {
-      return res.status(400).json({ error: "You cannot mark your own message as read" });
+      return res
+        .status(400)
+        .json({ error: "You cannot mark your own message as read" });
     }
 
     const readAt = new Date();
@@ -443,7 +460,13 @@ router.post("/messages/:conversationId/mark-read", auth, async (req, res) => {
       readAt,
     });
 
-    return res.status(200).json({ message: "Messages marked as read", conversationId, messageId, userId, readAt });
+    return res.status(200).json({
+      message: "Messages marked as read",
+      conversationId,
+      messageId,
+      userId,
+      readAt,
+    });
   } catch (error) {
     console.error("Mark read error:", error);
     return res.status(500).json({ error: "Internal server error" });
@@ -499,13 +522,18 @@ router.put("/messages/:id/reactions", auth, async (req, res) => {
 
     // emits the updated reaction to all the members of the conversation
     const io = req.app.get("io");
-    emitToConversation(io, result.message.conversationId, "message-reaction-update", {
-      conversationId: result.message.conversationId,
-      messageId: result.message.id,
-      userId,
-      emoji,
-      removed: false,
-    });
+    emitToConversation(
+      io,
+      result.message.conversationId,
+      "message-reaction-update",
+      {
+        conversationId: result.message.conversationId,
+        messageId: result.message.id,
+        userId,
+        emoji,
+        removed: false,
+      },
+    );
 
     return res.status(200).json(result.reaction);
   } catch (error) {
@@ -654,7 +682,9 @@ router.post("/:id/members/add", auth, async (req, res) => {
     const existingMember = await findMember(conversationId, userId);
 
     if (existingMember) {
-      return res.status(409).json({ error: "User is already in the conversation" });
+      return res
+        .status(409)
+        .json({ error: "User is already in the conversation" });
     }
 
     // adds the user in the group (conversation)
@@ -682,7 +712,9 @@ router.delete("/:id/members/:userId", auth, async (req, res) => {
     const conversation = await checkAdmin(conversationId, req.userId);
 
     if (!conversation) {
-      return res.status(403).json({ error: "You are not the admin of the group" });
+      return res
+        .status(403)
+        .json({ error: "You are not the admin of the group" });
     }
 
     // check if the user exists or not
@@ -696,7 +728,9 @@ router.delete("/:id/members/:userId", auth, async (req, res) => {
     const member = await findMember(conversationId, userId);
 
     if (!member) {
-      return res.status(404).json({ error: "User is not a member of this conversation" });
+      return res
+        .status(404)
+        .json({ error: "User is not a member of this conversation" });
     }
 
     // removes the user
@@ -743,9 +777,7 @@ router.patch("/:id", auth, async (req, res) => {
       return res.status(404).json({ error: "Conversation not found" });
     }
 
-    const isMember = conversation.members.some(
-      (m) => m.userId === req.userId,
-    );
+    const isMember = conversation.members.some((m) => m.userId === req.userId);
 
     if (!isMember) {
       return res
@@ -806,6 +838,93 @@ router.delete("/:id/leave", auth, async (req, res) => {
     });
 
     return res.status(200).json({ message: "User removed from conversation" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// delete a group
+router.delete("/:id", auth, async (req, res) => {
+  try {
+    // gets the required data ( userid and conversation id)
+    const conversationId = parseId(req.params.id);
+    // check if the user exists or not
+    const user = await findUser(req.userId);
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // check the one who is deleting the group is admin or not
+    const conversation = await checkAdmin(conversationId, user.id);
+
+    if (!conversation) {
+      return res
+        .status(403)
+        .json({ error: "You are not the admin of the group" });
+    }
+
+    // check if the user is in the conversation (group) or not
+    const member = await findMember(conversationId, user.id);
+
+    if (!member) {
+      return res
+        .status(404)
+        .json({ error: "User is not a member of this conversation" });
+    }
+
+    // removes the conversation and the message ( delete all the things of the group)
+    /*  flow (removes all the data of the group)
+      get all the msg id of that group 
+      delete all the reactions of mesage that is done in that group
+      delete all the read messages of that group
+      delete all the messages of the group
+      delete all the members of the group
+      delete the group
+    */
+    await prisma.$transaction(async (tx) => {
+      // gets all the mesage ids form that group
+      const groupMsgs = await tx.message.findMany({
+        where: { conversationId: conversationId },
+        select: { id: true },
+      });
+      // deletes all the message reaction done in the group
+      const messageIds = groupMsgs.map((msg) => msg.id);
+      await tx.messageReaction.deleteMany({
+        where: {
+          messageId: {
+            in: messageIds,
+          },
+        },
+      });
+      // deletes all the message read data of that group
+      await tx.messageRead.deleteMany({
+        where: { conversationId: conversationId },
+      });
+
+      // deletes all the messages of that group
+      await tx.message.deleteMany({
+        where: { conversationId: conversationId },
+      });
+
+      // deletes all the conversation members ( group members ) of that group
+      await tx.conversationMember.deleteMany({
+        where: {
+          conversationId: conversationId,
+        },
+      });
+      // deletes the group
+      await tx.conversation.delete({
+        where: { id: conversationId },
+      });
+    });
+    const io = req.app.get("io");
+    io.to(String(conversationId)).emit("group-deleted", { conversationId });
+
+    return res
+      .status(200)
+      .json({ message: "Group deleted with all data erased" });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Internal server error" });
