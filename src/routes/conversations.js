@@ -245,7 +245,7 @@ router.post("/messages", auth, async (req, res) => {
         forwardedFromMsgId: forwardedFromMsgId,
       },
       include: {
-        sender: { select: { id: true, username: true, avatar: true } },
+        user: { select: { id: true, username: true, avatar: true } },
         reactions: {
           select: {
             emoji: true,
@@ -254,7 +254,7 @@ router.post("/messages", auth, async (req, res) => {
         },
         replyTo: {
           include: {
-            sender: { select: { id: true, username: true } },
+            user: { select: { id: true, username: true } },
           },
         },
       },
