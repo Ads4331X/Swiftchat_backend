@@ -137,22 +137,19 @@ router.post("/new-conversation", auth, async (req, res) => {
     return handleError(res);
   }
 });
+
 router.get("/messages/:conversationId", auth, async (req, res) => {
   try {
-    // gets the conversation id
     const conversationId = parseId(req.params.conversationId);
 
-    // check if user is a member of the conversation
     const membership = await ensureMember(conversationId, req.userId, res);
     if (!membership) return;
 
-    // sets the pagination limit and cursor
     const limit = Math.min(parseInt(req.query.limit) || 50, 200);
     const before = parseInt(req.query.before);
 
     const where = { conversationId: conversationId };
 
-    // get messages before a cursor (for pagination)
     if (before) {
       const cursorMessage = await prisma.message.findFirst({
         where: { id: before },
@@ -163,7 +160,6 @@ router.get("/messages/:conversationId", auth, async (req, res) => {
       }
     }
 
-    // gets the messages of the conversation
     const messages = await prisma.message.findMany({
       where,
       orderBy: { sentAt: "desc" },
@@ -179,9 +175,29 @@ router.get("/messages/:conversationId", auth, async (req, res) => {
       },
     });
 
-    messages.reverse();
+    const replyToIds = messages
+      .map((m) => m.replyToId)
+      .filter((id) => id !== null);
 
-    return res.status(200).json(messages);
+    const repliedMessages = await prisma.message.findMany({
+      where: {
+        id: {
+          in: replyToIds,
+        },
+      },
+    });
+
+    const replyMap = new Map(repliedMessages.map((msg) => [msg.id, msg]));
+
+    const resolvedReplies = messages.map((m) => ({
+      ...m,
+      replyTo: m.replyToId ? (replyMap.get(m.replyToId) ?? null) : null,
+    }));
+
+    // Reverse the resolved array instead of the raw messages
+    resolvedReplies.reverse();
+
+    return res.status(200).json(resolvedReplies);
   } catch (error) {
     return handleError(res);
   }
@@ -190,8 +206,19 @@ router.get("/messages/:conversationId", auth, async (req, res) => {
 router.post("/messages", auth, async (req, res) => {
   try {
     // gets the message details from the user
-    const { messageText, conversationId: rawConversationId, nonce } = req.body;
+    const {
+      messageText,
+      conversationId: rawConversationId,
+      nonce,
+      replyToId: rawReplyToId,
+      forwardedFromMsgId: rawForwardedFromMsgId,
+    } = req.body;
+
     const conversationId = parseId(rawConversationId);
+    const forwardedFromMsgId = rawForwardedFromMsgId
+      ? parseId(rawForwardedFromMsgId)
+      : null;
+    const replyToId = rawReplyToId ? parseId(rawReplyToId) : null;
     const senderId = req.userId;
 
     // check if the required fields are present or not
@@ -214,12 +241,20 @@ router.post("/messages", auth, async (req, res) => {
         senderId: senderId,
         text: messageText,
         nonce: normalizedNonce,
+        replyToId: replyToId,
+        forwardedFromMsgId: forwardedFromMsgId,
       },
       include: {
+        sender: { select: { id: true, username: true, avatar: true } },
         reactions: {
           select: {
             emoji: true,
             user: { select: { id: true } },
+          },
+        },
+        replyTo: {
+          include: {
+            sender: { select: { id: true, username: true } },
           },
         },
       },
@@ -930,5 +965,64 @@ router.delete("/:id", auth, async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
+router.get(
+  "/:conversationId/messages/:messageId/read-status",
+  auth,
+  async (req, res) => {
+    try {
+      const conversationId = parseInt(req.params.conversationId);
+      const messageId = parseInt(req.params.messageId);
+
+      const user = await findUser(req.userId);
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const member = await findMember(conversationId, user.id);
+
+      if (!member) {
+        return res
+          .status(404)
+          .json({ error: "User is not a member of this conversation" });
+      }
+
+      const message = await findMessage(messageId);
+
+      if (!message) {
+        return res.status(404).json({ error: "Message not found" });
+      }
+
+      const messageReadUsers = await prisma.messageRead.findMany({
+        where: {
+          conversationId,
+          messageId,
+        },
+        select: {
+          userId: true,
+        },
+      });
+
+      const userIds = messageReadUsers.map((read) => read.userId);
+
+      const messageReadUsersDetails = await prisma.user.findMany({
+        where: {
+          id: {
+            in: userIds,
+          },
+        },
+      });
+
+      return res.status(200).json(messageReadUsersDetails);
+    } catch (error) {
+      console.error("Error fetching message read status:", error);
+
+      return res.status(500).json({
+        error: "Failed to fetch message read status",
+      });
+    }
+  },
+);
 
 export default router;
