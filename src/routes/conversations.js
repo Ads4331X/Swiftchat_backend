@@ -15,6 +15,7 @@ import {
   ensureMember,
   findAndValidateMessage,
   handleReaction,
+  findForPin,
 } from "../helpers/conversations.js";
 
 const router = express.Router();
@@ -1020,6 +1021,132 @@ router.get(
 
       return res.status(500).json({
         error: "Failed to fetch message read status",
+      });
+    }
+  },
+);
+
+router.get(
+  "/:conversationId/messages/:messageId/pin",
+  auth,
+  async (req, res) => {
+    try {
+      const conversationId = parseId(req.params.conversationId);
+      const messageId = parseId(req.params.messageId);
+
+      const validated = await findForPin(
+        conversationId,
+        messageId,
+        req.userId,
+        res,
+      );
+      if (!validated) return;
+
+      const pinnedMsgs = await prisma.pinnedMessage.findMany({
+        where: {
+          conversationId: conversationId,
+        },
+      });
+
+      return res.status(200).json(pinnedMsgs);
+    } catch (error) {
+      console.error("Error fetching the pinned message: ", error);
+
+      return res.status(500).json({
+        error: "Failed to fetch the pinned message",
+      });
+    }
+  },
+);
+
+router.post(
+  "/:conversationId/messages/:messageId/pin",
+  auth,
+  async (req, res) => {
+    try {
+      const conversationId = parseId(req.params.conversationId);
+      const messageId = parseId(req.params.messageId);
+      const userId = parseId(req.userId);
+
+      const validated = await findForPin(
+        conversationId,
+        messageId,
+        req.userId,
+        res,
+      );
+      if (!validated) return;
+
+      const isMsgPinned = await prisma.pinnedMessage.findUnique({
+        where: {
+          conversationId_messageId: {
+            conversationId: conversationId,
+            messageId: messageId,
+          },
+        },
+      });
+
+      if (isMsgPinned)
+        return res.status().json({ error: "Message is already pinned" });
+      const pinMsg = await prisma.pinnedMessage.create({
+        data: {
+          messageId: messageId,
+          conversationId: conversationId,
+          pinnedById: userId,
+          pinnedAt: new Date(),
+        },
+      });
+      return res.status(200).json(pinMsg);
+    } catch (error) {
+      console.error("Error pinning message: ", error);
+
+      return res.status(500).json({
+        error: "Failed to pin the message",
+      });
+    }
+  },
+);
+
+router.delete(
+  "/:conversationId/messages/:messageId/pin",
+  auth,
+  async (req, res) => {
+    try {
+      const conversationId = parseId(req.params.conversationId);
+      const messageId = parseId(req.params.messageId);
+
+      const validated = await findForPin(
+        conversationId,
+        messageId,
+        req.userId,
+        res,
+      );
+      if (!validated) return;
+
+      const isMsgPinned = await prisma.pinnedMessage.findUnique({
+        where: {
+          conversationId_messageId: {
+            conversationId: conversationId,
+            messageId: messageId,
+          },
+        },
+      });
+
+      if (!isMsgPinned)
+        return res.status().json({ error: "Pinned Message not found" });
+      const pinMsg = await prisma.pinnedMessage.delete({
+        where: {
+          conversationId_messageId: {
+            conversationId: conversationId,
+            messageId: messageId,
+          },
+        },
+      });
+      return res.status(200).json(pinMsg);
+    } catch (error) {
+      console.error("Error removing the pinned message: ", error);
+
+      return res.status(500).json({
+        error: "Failed to remove the pin message",
       });
     }
   },

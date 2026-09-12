@@ -30,6 +30,7 @@ model User {
   passwordResetTokens  PasswordResetToken[]
   conversationsCreated Conversation[]
   messageReads         MessageRead[]
+  pinnedMessages       PinnedMessage[]
 }
 
 model PasswordResetToken {
@@ -51,9 +52,10 @@ model Conversation {
   name        String?
   creator     User     @relation(fields: [createdById], references: [id])
 
-  members      ConversationMember[]
-  messages     Message[]
-  messageReads MessageRead[]
+  members        ConversationMember[]
+  messages       Message[]
+  messageReads   MessageRead[]
+  pinnedMessages PinnedMessage[]
 }
 
 model ConversationMember {
@@ -69,26 +71,47 @@ model ConversationMember {
 }
 
 model Message {
-  id             Int       @id @default(autoincrement())
-  text           String // this is encrypted text ( message)
-  nonce          String
+  id    Int    @id @default(autoincrement())
+  text  String
+  nonce String
+
   conversationId Int
   senderId       Int
-  editedAt       DateTime  @updatedAt
-  sentAt         DateTime  @default(now())
-  replyToId      Int?
-  replyTo        Message?  @relation("MsgReply", fields: [replyToId], references: [id])
-  repliedBy      Message[] @relation("MsgReply")
 
+  sentAt   DateTime  @default(now())
+  editedAt DateTime?
+
+  // Reply relationship
+  replyToId Int?
+  replyTo   Message?  @relation("MsgReply", fields: [replyToId], references: [id])
+  repliedBy Message[] @relation("MsgReply")
+
+  // Forwarding
   forwardedFromMsgId Int?
 
-  reactions MessageReaction[]
-
-  conversation Conversation  @relation(fields: [conversationId], references: [id])
-  user         User          @relation(fields: [senderId], references: [id])
-  messageReads MessageRead[]
+  // Relations
+  reactions      MessageReaction[]
+  conversation   Conversation      @relation(fields: [conversationId], references: [id])
+  user           User              @relation(fields: [senderId], references: [id])
+  messageReads   MessageRead[]
+  pinnedMessages PinnedMessage[]
 
   @@index([conversationId, sentAt])
+}
+
+model PinnedMessage {
+  id             Int      @id @default(autoincrement())
+  conversationId Int
+  messageId      Int
+  pinnedById     Int
+  pinnedAt       DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  message      Message      @relation(fields: [messageId], references: [id])
+  pinnedBy     User         @relation(fields: [pinnedById], references: [id])
+
+  @@unique([conversationId, messageId])
+  @@index([conversationId])
 }
 
 model MessageReaction {

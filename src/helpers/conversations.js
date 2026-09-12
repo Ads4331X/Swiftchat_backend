@@ -86,6 +86,43 @@ export async function findAndValidateMessage(messageId, userId, res) {
   return message;
 }
 
+// validate user, membership, message and admin for the pin endpoints
+export async function findForPin(conversationId, messageId, userId, res) {
+  if (!userId) {
+    res.status(404).json({ error: "User not found" });
+    return null;
+  }
+
+  const member = await findMember(conversationId, userId);
+
+  if (!member) {
+    res.status(404).json({ error: "User is not a member of this conversation" });
+    return null;
+  }
+
+  const message = await findMessage(messageId);
+
+  if (!message) {
+    res.status(404).json({ error: "Message not found" });
+    return null;
+  }
+
+  // groups with more than 2 members can only be managed by the admin
+  const conversationMembers = await prisma.conversationMember.findMany({
+    where: { conversationId },
+  });
+
+  if (
+    conversationMembers.length > 2 &&
+    !(await checkAdmin(conversationId, userId))
+  ) {
+    res.status(403).json({ error: "You are not the admin of the group" });
+    return null;
+  }
+
+  return { message, conversationId };
+}
+
 // handle reaction upsert (used by both add and update)
 export async function handleReaction(messageId, userId, emoji, res) {
   const message = await findMessage(messageId);
