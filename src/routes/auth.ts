@@ -33,13 +33,13 @@ router.post("/register", async (req, res) => {
     }
 
     // hash the password
-    const passwordHash = await bcrypt.hash(result.data.password, 12);
+    const passwordHash = await bcrypt.hash(result.data!.password!, 12);
 
     // creates a new user (regesters a user)
     const user = await prisma.user.create({
       data: {
-        username: result.data.username,
-        email: result.data.email,
+        username: result.data!.username!,
+        email: result.data!.email!,
         password_hash: passwordHash,
       },
     });
@@ -48,7 +48,7 @@ router.post("/register", async (req, res) => {
       message: "Account created successfully",
       userId: user.id,
     });
-  } catch (err) {
+  } catch (err: any) {
     // Handle duplicate username/email (unique constraints)
     if (err?.code === "P2002") {
       // Prisma 7 with adapter-pg nests the constraint fields here
@@ -102,9 +102,10 @@ router.post("/login", async (req, res) => {
     }
 
     // create a jwt token
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
+    const token = jwt.sign(
+      { userId: user.id },
+      process.env.JWT_SECRET as string,
+    );
 
     return res.status(200).json({
       message: "Login successful",
@@ -142,7 +143,7 @@ router.post("/forgot-password", otpLimiter, async (req, res) => {
 
     // check if user exists
     const user = await prisma.user.findUnique({
-      where: { email: result.data },
+      where: { email: result.data! },
       select: {
         id: true,
         email: true,
@@ -214,8 +215,8 @@ router.post("/forgot-password", otpLimiter, async (req, res) => {
     await transporter.sendMail(mailOptions);
 
     // Keep exactly one active token per user.
-    await prisma.PasswordResetToken.deleteMany({ where: { userId: user.id } });
-    await prisma.PasswordResetToken.create({
+    await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+    await prisma.passwordResetToken.create({
       data: {
         userId: user.id,
         tokenHash: hashOtp,
@@ -289,7 +290,7 @@ router.post("/reset-password", verifyOtpLimiter, async (req, res) => {
 
     // check if user exists
     const user = await prisma.user.findUnique({
-      where: { email: emailResult.data },
+      where: { email: emailResult.data! },
       select: { id: true },
     });
 
@@ -307,6 +308,8 @@ router.post("/reset-password", verifyOtpLimiter, async (req, res) => {
       orderBy: { createdAt: "desc" },
     });
 
+    if (!token) return res.status(404).json({ error: `Reset token not found` });
+
     // check if the token is valid or not by comparing it with the hash otp
     const valid = token ? await bcrypt.compare(otp, token.tokenHash) : false;
     if (!valid) {
@@ -314,7 +317,7 @@ router.post("/reset-password", verifyOtpLimiter, async (req, res) => {
     }
 
     // hash the password
-    const passwordHash = await bcrypt.hash(passwordResult.data, 12);
+    const passwordHash = await bcrypt.hash(passwordResult.data!, 12);
 
     // update the password and mark the reset token as used in a single transaction
     await prisma.$transaction([
@@ -322,7 +325,7 @@ router.post("/reset-password", verifyOtpLimiter, async (req, res) => {
         where: { id: user.id },
         data: { password_hash: passwordHash },
       }),
-      prisma.PasswordResetToken.update({
+      prisma.passwordResetToken.update({
         where: { id: token.id },
         data: { usedAt: new Date() },
       }),

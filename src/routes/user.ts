@@ -13,9 +13,14 @@ const router = express.Router();
 
 router.get("/user-details", auth, async (req, res) => {
   try {
+    const userId = Number(req.userId);
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
     // gets the user details
     const user = await prisma.user.findUnique({
-      where: { id: req.userId },
+      where: { id: userId },
       select: {
         username: true,
         email: true,
@@ -39,6 +44,10 @@ router.patch("/update-user-info", auth, async (req, res) => {
   try {
     // gets the user details to update
     const { username, email } = req.body;
+    const userId = Number(req.userId);
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
 
     // check if the username is validate or not
     const usernameResult = validateUsername(username);
@@ -54,16 +63,16 @@ router.patch("/update-user-info", auth, async (req, res) => {
 
     // updates the user details
     const updatedUser = await prisma.user.update({
-      where: { id: req.userId },
+      where: { id: userId },
       data: {
-        username: usernameResult.data,
-        email: emailResult.data,
+        username: usernameResult.data!,
+        email: emailResult.data!,
       },
       select: { id: true, username: true, email: true },
     });
 
     return res.json(updatedUser);
-  } catch (err) {
+  } catch (err: any) {
     // Handle duplicate username/email (unique constraints)
     if (err?.code === "P2002") {
       // Prisma 7 with adapter-pg nests the constraint fields here
@@ -94,9 +103,15 @@ router.post("/verify-password", auth, async (req, res) => {
       return res.status(400).json({ error: "Current password is required" });
     }
 
+    const userId = Number(req.userId);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
     // check if user exists
     const user = await prisma.user.findUnique({
-      where: { id: req.userId },
+      where: { id: userId },
       select: { password_hash: true },
     });
 
@@ -128,9 +143,15 @@ router.patch("/change-password", auth, async (req, res) => {
       return res.status(400).json({ error: "Current password is required" });
     }
 
+    const userId = Number(req.userId);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
     // check if user exists
     const user = await prisma.user.findUnique({
-      where: { id: req.userId },
+      where: { id: userId },
       select: { password_hash: true },
     });
 
@@ -164,7 +185,7 @@ router.patch("/change-password", auth, async (req, res) => {
 
     // updates the user password
     await prisma.user.update({
-      where: { id: req.userId },
+      where: { id: userId },
       data: { password_hash: passwordHash },
     });
 
@@ -181,21 +202,26 @@ router.get("/search", auth, async (req, res) => {
     const { username } = req.query;
 
     // check if the username is empty or not
-    if (!username?.trim()) {
+    if (!String(username)?.trim()) {
       return res.status(400).json({
         error: "Username is required",
       });
+    }
+    const userId = Number(req.userId);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     // search users by username and exclude the current user
     const users = await prisma.user.findMany({
       where: {
         username: {
-          contains: username.trim(),
+          contains: String(username).trim(),
           mode: "insensitive",
         },
         id: {
-          not: req.userId,
+          not: Number(userId),
         },
       },
       select: {
@@ -221,9 +247,15 @@ router.get("/search", auth, async (req, res) => {
 
 router.delete("/account", auth, async (req, res) => {
   try {
+    const userId = Number(req.userId);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
     // gets all the conversations the user is a member of
     const memberships = await prisma.conversationMember.findMany({
-      where: { userId: req.userId },
+      where: { userId: userId },
       select: { conversationId: true },
     });
     const conversationIds = memberships.map((m) => m.conversationId);
@@ -231,10 +263,12 @@ router.delete("/account", auth, async (req, res) => {
     // delete all the user data in a single transaction
     await prisma.$transaction(async (tx) => {
       // deletes all the messages sent by the user
-      await tx.message.deleteMany({ where: { senderId: req.userId } });
+      await tx.message.deleteMany({ where: { senderId: userId } });
 
       // removes the user from all the conversations
-      await tx.conversationMember.deleteMany({ where: { userId: req.userId } });
+      await tx.conversationMember.deleteMany({
+        where: { userId: userId },
+      });
 
       // find conversations that are now empty and delete them
       if (conversationIds.length > 0) {
@@ -259,11 +293,11 @@ router.delete("/account", auth, async (req, res) => {
       }
 
       // deletes the user account
-      await tx.user.delete({ where: { id: req.userId } });
+      await tx.user.delete({ where: { id: userId } });
     });
 
     return res.status(200).json({ message: "Account deleted successfully" });
-  } catch (err) {
+  } catch (err: any) {
     if (err?.code === "P2025") {
       return res.status(404).json({ error: "User not found" });
     }
@@ -283,11 +317,15 @@ router.put("/public-key", auth, async (req, res) => {
         error: "Public key is required",
       });
     }
+    const userId = Number(req.userId);
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
 
     // saves the public key for the user
     await prisma.user.update({
       where: {
-        id: req.userId,
+        id: userId,
       },
       data: {
         publicKey,
@@ -297,7 +335,7 @@ router.put("/public-key", auth, async (req, res) => {
     return res.status(200).json({
       message: "Public key saved",
     });
-  } catch (err) {
+  } catch (err: any) {
     if (err?.code === "P2025") {
       return res.status(404).json({
         error: "User not found",
@@ -315,7 +353,7 @@ router.put("/public-key", auth, async (req, res) => {
 router.get("/:userId/public-key", auth, async (req, res) => {
   try {
     // gets the targeted user id
-    const targetedUserId = parseInt(req.params.userId);
+    const targetedUserId = parseInt(String(req.params.userId));
 
     // check if the targeted user exists or not
     const targetedUser = await prisma.user.findUnique({
@@ -350,9 +388,13 @@ router.get("/:userId/public-key", auth, async (req, res) => {
 
 router.get("/key-backup", auth, async (req, res) => {
   try {
+    const userId = Number(req.userId);
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
     // gets the key backup details of the user
     const key = await prisma.user.findUnique({
-      where: { id: req.userId },
+      where: { id: userId },
       select: {
         keyBackupEncrypted: true,
         keyBackupNonce: true,
@@ -388,6 +430,10 @@ router.get("/key-backup", auth, async (req, res) => {
 
 router.put("/key-backup", auth, async (req, res) => {
   try {
+    const userId = Number(req.userId);
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
     // gets the key backup details from the user
     const {
       keyBackupEncrypted: encryptedPrivateKey,
@@ -408,22 +454,22 @@ router.put("/key-backup", auth, async (req, res) => {
     // saves the key backup for the user
     await prisma.user.update({
       where: {
-        id: req.userId,
+        id: userId,
       },
       data: {
-        keyBackupEncrypted: encryptedPrivateKey,
-        keyBackupNonce: nonce,
-        keyBackupSalt: salt,
-        keyBackupOpsLimit: typeof opsLimit === "number" ? opsLimit : undefined,
-        keyBackupMemLimit: typeof memLimit === "number" ? memLimit : undefined,
-        keyBackupAlg: typeof alg === "number" ? alg : undefined,
+        keyBackupEncrypted: encryptedPrivateKey!,
+        keyBackupNonce: nonce!,
+        keyBackupSalt: salt!,
+        keyBackupOpsLimit: typeof opsLimit === "number" ? opsLimit : null,
+        keyBackupMemLimit: typeof memLimit === "number" ? memLimit : null,
+        keyBackupAlg: typeof alg === "number" ? alg : null,
       },
     });
 
     return res.status(200).json({
       message: "Backup key saved",
     });
-  } catch (err) {
+  } catch (err: any) {
     if (err?.code === "P2025") {
       return res.status(404).json({
         error: "User not found",
@@ -441,7 +487,7 @@ router.put("/key-backup", auth, async (req, res) => {
 router.get("/:id", auth, async (req, res) => {
   try {
     // gets the targeted user id
-    const targetedUserId = parseInt(req.params.id);
+    const targetedUserId = parseInt(String(req.params.id));
 
     // check if the targeted user exists or not
     const targetedUser = await prisma.user.findUnique({

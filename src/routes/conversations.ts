@@ -22,11 +22,17 @@ const router = express.Router();
 
 router.get("/", auth, async (req, res) => {
   try {
+    const userId = Number(req.userId);
+
+    if (!userId)
+      return res
+        .status(404)
+        .json({ error: `User not found, please create a account and login` });
     // gets all the conversations the user is a member of
     const conversations = await prisma.conversation.findMany({
       where: {
         members: {
-          some: { userId: req.userId },
+          some: { userId: userId },
         },
       },
       include: {
@@ -63,20 +69,24 @@ router.get("/", auth, async (req, res) => {
       id: conv.id,
       name: conv.name,
       createdById: conv.createdById,
-      members: conv.members
-        .map((m) => m.user)
-        .filter((u) => u.id !== req.userId),
+      members: conv.members.map((m) => m.user).filter((u) => u.id !== userId),
       lastMessage: conv.messages[0] ?? null,
     }));
 
     return res.json(cleaned);
-  } catch (error) {
+  } catch (error: any) {
     return handleError(res);
   }
 });
 
 router.post("/new-conversation", auth, async (req, res) => {
   try {
+    const userId = Number(req.userId);
+
+    if (!userId)
+      return res
+        .status(404)
+        .json({ error: `Please create a account and login` });
     // gets the target username from the user
     const { targetUsername } = req.body;
 
@@ -91,7 +101,7 @@ router.post("/new-conversation", auth, async (req, res) => {
       return res.status(400).json({ error: "Searched User not found" });
 
     // check if the target user is the current user or not
-    if (targetedUser.id === req.userId)
+    if (targetedUser.id === userId)
       return res
         .status(400)
         .json({ error: "You can't create a group with yourself" });
@@ -100,7 +110,7 @@ router.post("/new-conversation", auth, async (req, res) => {
     const existingConversation = await prisma.conversation.findFirst({
       where: {
         AND: [
-          { members: { some: { userId: req.userId } } },
+          { members: { some: { userId: Number(req.userId) } } },
           { members: { some: { userId: targetedUser.id } } },
         ],
       },
@@ -123,9 +133,9 @@ router.post("/new-conversation", auth, async (req, res) => {
     // create the conversation
     const newConversation = await prisma.conversation.create({
       data: {
-        createdById: req.userId,
+        createdById: userId,
         members: {
-          create: [{ userId: req.userId }, { userId: targetedUser.id }],
+          create: [{ userId: userId }, { userId: targetedUser.id }],
         },
       },
     });
@@ -134,28 +144,37 @@ router.post("/new-conversation", auth, async (req, res) => {
       message: "New conversation created successfully",
       conversation: newConversation,
     });
-  } catch (error) {
+  } catch (error: any) {
     return handleError(res);
   }
 });
 
 router.get("/messages/:conversationId", auth, async (req, res) => {
   try {
-    const conversationId = parseId(req.params.conversationId);
+    const userId = Number(req.userId);
 
-    const membership = await ensureMember(conversationId, req.userId, res);
+    if (!userId)
+      return res
+        .status(404)
+        .json({ error: `User not found, please create a account and login` });
+    const conversationId = parseId(
+      req.params.conversationId as string as string,
+    );
+
+    const membership = await ensureMember(conversationId, userId, res);
     if (!membership) return;
 
-    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
-    const before = parseInt(req.query.before);
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const before = parseInt(req.query.before as string);
 
-    const where = { conversationId: conversationId };
+    const where: any = { conversationId };
 
     if (before) {
       const cursorMessage = await prisma.message.findFirst({
         where: { id: before },
         select: { sentAt: true },
       });
+
       if (cursorMessage) {
         where.sentAt = { lt: cursorMessage.sentAt };
       }
@@ -199,7 +218,7 @@ router.get("/messages/:conversationId", auth, async (req, res) => {
     resolvedReplies.reverse();
 
     return res.status(200).json(resolvedReplies);
-  } catch (error) {
+  } catch (error: any) {
     return handleError(res);
   }
 });
@@ -220,7 +239,7 @@ router.post("/messages", auth, async (req, res) => {
       ? parseId(rawForwardedFromMsgId)
       : null;
     const replyToId = rawReplyToId ? parseId(rawReplyToId) : null;
-    const senderId = req.userId;
+    const senderId = Number(req.userId);
 
     // check if the required fields are present or not
     if (!messageText || !nonce || Number.isNaN(conversationId)) {
@@ -266,7 +285,7 @@ router.post("/messages", auth, async (req, res) => {
     emitToConversation(io, conversationId, "new-message", message);
 
     return res.status(201).json(message);
-  } catch (error) {
+  } catch (error: any) {
     return handleError(res);
   }
 });
@@ -274,7 +293,7 @@ router.post("/messages", auth, async (req, res) => {
 router.patch("/messages/:id", auth, async (req, res) => {
   try {
     // gets the message details from the user
-    const messageId = parseId(req.params.id);
+    const messageId = parseId(req.params.id as string as string);
     const { text, nonce } = req.body;
 
     // check if the required fields are present or not
@@ -285,7 +304,11 @@ router.patch("/messages/:id", auth, async (req, res) => {
     const normalizedNonce = normalizeNonce(nonce);
 
     // find message and check ownership
-    const message = await findAndValidateMessage(messageId, req.userId, res);
+    const message = await findAndValidateMessage(
+      messageId,
+      Number(req.userId),
+      res,
+    );
     if (!message) return;
 
     // updates the message
@@ -304,7 +327,7 @@ router.patch("/messages/:id", auth, async (req, res) => {
     );
 
     return res.status(200).json(updatedMessage);
-  } catch (error) {
+  } catch (error: any) {
     return handleError(res);
   }
 });
@@ -312,10 +335,14 @@ router.patch("/messages/:id", auth, async (req, res) => {
 router.delete("/messages/:id", auth, async (req, res) => {
   try {
     // gets the message id
-    const messageId = parseId(req.params.id);
+    const messageId = parseId(req.params.id as string as string);
 
     // find message and check ownership
-    const message = await findAndValidateMessage(messageId, req.userId, res);
+    const message = await findAndValidateMessage(
+      messageId,
+      Number(req.userId),
+      res,
+    );
     if (!message) return;
 
     // deletes the message
@@ -330,7 +357,7 @@ router.delete("/messages/:id", auth, async (req, res) => {
     });
 
     return res.status(200).json(deletedMessage);
-  } catch (error) {
+  } catch (error: any) {
     return handleError(res);
   }
 });
@@ -338,8 +365,8 @@ router.delete("/messages/:id", auth, async (req, res) => {
 router.put("/:id/key/:userId", auth, async (req, res) => {
   try {
     // gets the required data ( conversation id and user id)
-    const conversationId = parseId(req.params.id);
-    const userId = parseId(req.params.userId);
+    const conversationId = parseId(req.params.id as string as string);
+    const userId = parseId(req.params.userId as string as string);
     const { encryptedKey, nonce } = req.body;
 
     // check if the required fields are present or not
@@ -351,7 +378,7 @@ router.put("/:id/key/:userId", auth, async (req, res) => {
     // check if requester is a member
     const conversationMember = await ensureMember(
       conversationId,
-      req.userId,
+      Number(req.userId),
       res,
     );
     if (!conversationMember) return;
@@ -378,7 +405,7 @@ router.put("/:id/key/:userId", auth, async (req, res) => {
     return res
       .status(200)
       .json({ message: "Conversation key stored successfully" });
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -386,8 +413,8 @@ router.put("/:id/key/:userId", auth, async (req, res) => {
 router.get("/:id/key", auth, async (req, res) => {
   try {
     // gets the conversation id and user id
-    const conversationId = parseId(req.params.id);
-    const userId = req.userId;
+    const conversationId = parseId(req.params.id as string as string);
+    const userId = Number(req.userId);
 
     // gets the encrypted conversation key of the user
     const result = await prisma.conversationMember.findUnique({
@@ -420,7 +447,7 @@ router.get("/:id/key", auth, async (req, res) => {
       nonce: result.nonce,
       createdById: result.conversation.createdById,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
 
     return res.status(500).json({
@@ -432,8 +459,8 @@ router.get("/:id/key", auth, async (req, res) => {
 router.post("/messages/:conversationId/mark-read", auth, async (req, res) => {
   try {
     // gets the user id, conversation id and message id
-    const userId = req.userId;
-    const conversationId = Number(req.params.conversationId);
+    const userId = Number(req.userId);
+    const conversationId = Number(req.params.conversationId as string);
     const { messageId } = req.body;
 
     // check if the required fields are present or not
@@ -503,7 +530,7 @@ router.post("/messages/:conversationId/mark-read", auth, async (req, res) => {
       userId,
       readAt,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Mark read error:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -513,8 +540,8 @@ router.post("/messages/:id/reactions", auth, async (req, res) => {
   try {
     // gets the message id and emoji from the user
     const { emoji } = req.body;
-    const messageId = parseId(req.params.id);
-    const userId = req.userId;
+    const messageId = parseId(req.params.id as string as string);
+    const userId = Number(req.userId);
 
     // check if the message id and emoji are validate or not
     if (validateMessageId(messageId, res)) return;
@@ -535,7 +562,7 @@ router.post("/messages/:id/reactions", auth, async (req, res) => {
     });
 
     return res.status(201).json(result.reaction);
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
     return res.status(500).json({ error: "Failed to add reaction" });
   }
@@ -545,9 +572,8 @@ router.put("/messages/:id/reactions", auth, async (req, res) => {
   try {
     // gets the message id and emoji from the user
     const { emoji } = req.body;
-    const messageId = parseId(req.params.id);
-    const userId = req.userId;
-
+    const messageId = parseId(req.params.id as string as string);
+    const userId = Number(req.userId);
     // check if the message id and emoji are validate or not
     if (validateMessageId(messageId, res)) return;
     if (validateEmoji(emoji, res)) return;
@@ -572,7 +598,7 @@ router.put("/messages/:id/reactions", auth, async (req, res) => {
     );
 
     return res.status(200).json(result.reaction);
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
     return res.status(500).json({ error: "Failed to add reaction" });
   }
@@ -582,9 +608,8 @@ router.delete("/messages/:id/reactions", auth, async (req, res) => {
   try {
     // gets the message id and emoji from the user
     const { emoji } = req.body;
-    const messageId = parseId(req.params.id);
-    const userId = req.userId;
-
+    const messageId = parseId(req.params.id as string);
+    const userId = Number(req.userId);
     // check if the message id is validate or not
     if (validateMessageId(messageId, res)) return;
 
@@ -613,7 +638,7 @@ router.delete("/messages/:id/reactions", auth, async (req, res) => {
     });
 
     return res.status(200).json(deletedReaction);
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
     return res.status(404).json({ error: "Reaction not found" });
   }
@@ -623,8 +648,7 @@ router.post("/group", auth, async (req, res) => {
   try {
     // gets the group details from the user
     const { name, membersId } = req.body;
-    const userId = req.userId;
-
+    const userId = Number(req.userId);
     // check if the group has enough members or not
     if (!membersId || membersId.length < 1) {
       return res.status(400).json({
@@ -639,15 +663,15 @@ router.post("/group", auth, async (req, res) => {
         name,
         members: {
           create: [
-            { userId: req.userId },
-            ...membersId.map((id) => ({ userId: id })),
+            { userId: Number(req.userId) },
+            ...membersId.map((id: number) => ({ userId: id })),
           ],
         },
       },
     });
 
     return res.status(201).json(group);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error creating group:", error);
 
     return res.status(500).json({
@@ -660,14 +684,18 @@ router.post("/:id/members", auth, async (req, res) => {
   try {
     // gets the user ids and conversation id
     const { userIds } = req.body;
-    const conversationId = parseId(req.params.id);
+    const conversationId = parseId(req.params.id as string);
 
     // check if the user ids are validate or not
     if (!Array.isArray(userIds) || userIds.length === 0)
       return res.status(400).json({ error: "Invalid userIds send or null" });
 
     // check if the user is a member of the conversation or not
-    const membership = await ensureMember(conversationId, req.userId, res);
+    const membership = await ensureMember(
+      conversationId,
+      Number(req.userId),
+      res,
+    );
     if (!membership) return;
 
     // filter out users that don't exist
@@ -688,7 +716,7 @@ router.post("/:id/members", auth, async (req, res) => {
     });
 
     res.status(201).json({ added: count });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error adding conversation members:", error);
     res.status(500).json({
       message: "Failed to add conversation members",
@@ -701,10 +729,14 @@ router.post("/:id/members/add", auth, async (req, res) => {
   try {
     // gets the required data ( userId and conversation id )
     const { userId } = req.body;
-    const conversationId = parseId(req.params.id);
+    const conversationId = parseId(req.params.id as string);
 
     // check if the user is a member of the conversation or not
-    const membership = await ensureMember(conversationId, req.userId, res);
+    const membership = await ensureMember(
+      conversationId,
+      Number(req.userId),
+      res,
+    );
     if (!membership) return;
 
     // check if the user exists or not
@@ -729,7 +761,7 @@ router.post("/:id/members/add", auth, async (req, res) => {
     });
 
     return res.status(201).json(addUser);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error adding conversation members:", error);
     return res.status(500).json({
       message: "Failed to add conversation members",
@@ -741,11 +773,11 @@ router.post("/:id/members/add", auth, async (req, res) => {
 router.delete("/:id/members/:userId", auth, async (req, res) => {
   try {
     // gets the required data ( userid and conversation id)
-    const userId = parseId(req.params.userId);
-    const conversationId = parseId(req.params.id);
+    const userId = parseId(req.params.userId as string);
+    const conversationId = parseId(req.params.id as string);
 
     // check the one who is removing the user is admin of the group (conversation) or not
-    const conversation = await checkAdmin(conversationId, req.userId);
+    const conversation = await checkAdmin(conversationId, Number(req.userId));
 
     if (!conversation) {
       return res
@@ -777,7 +809,7 @@ router.delete("/:id/members/:userId", auth, async (req, res) => {
     });
 
     return res.status(200).json({ message: "User removed from conversation" });
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -800,7 +832,7 @@ router.patch("/:id", auth, async (req, res) => {
     }
 
     // gets the conversation id
-    const conversationId = parseId(req.params.id);
+    const conversationId = parseId(req.params.id as string);
 
     // fetch the conversation with its members so we can tell
     // whether this is a 1:1 and whether the user is a member
@@ -813,7 +845,9 @@ router.patch("/:id", auth, async (req, res) => {
       return res.status(404).json({ error: "Conversation not found" });
     }
 
-    const isMember = conversation.members.some((m) => m.userId === req.userId);
+    const isMember = conversation.members.some(
+      (m) => m.userId === Number(req.userId),
+    );
 
     if (!isMember) {
       return res
@@ -823,7 +857,7 @@ router.patch("/:id", auth, async (req, res) => {
 
     // any member of a 1:1 conversation can set a nickname,
     // but groups can only be renamed by the admin
-    const isAdmin = conversation.createdById === req.userId;
+    const isAdmin = conversation.createdById === Number(req.userId);
     const is1to1 = conversation.members.length === 2;
 
     if (!isAdmin && !is1to1) {
@@ -842,7 +876,7 @@ router.patch("/:id", auth, async (req, res) => {
       message: "Group name changed",
       conversation: updatedConversation,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -850,17 +884,17 @@ router.patch("/:id", auth, async (req, res) => {
 
 router.delete("/:id/leave", auth, async (req, res) => {
   try {
-    const conversationId = parseId(req.params.id);
+    const conversationId = parseId(req.params.id as string);
 
     // check if user exists
-    const user = await findUser(req.userId);
+    const user = await findUser(Number(req.userId));
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
     // check if user is in the group
-    const inConversation = await findMember(conversationId, req.userId);
+    const inConversation = await findMember(conversationId, Number(req.userId));
 
     if (!inConversation) {
       return res.status(401).json({ error: "You are not in the conversation" });
@@ -869,12 +903,12 @@ router.delete("/:id/leave", auth, async (req, res) => {
     // remove user from the group
     await prisma.conversationMember.delete({
       where: {
-        conversationId_userId: { conversationId, userId: req.userId },
+        conversationId_userId: { conversationId, userId: Number(req.userId) },
       },
     });
 
     return res.status(200).json({ message: "User removed from conversation" });
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -884,9 +918,9 @@ router.delete("/:id/leave", auth, async (req, res) => {
 router.delete("/:id", auth, async (req, res) => {
   try {
     // gets the required data ( userid and conversation id)
-    const conversationId = parseId(req.params.id);
+    const conversationId = parseId(req.params.id as string);
     // check if the user exists or not
-    const user = await findUser(req.userId);
+    const user = await findUser(Number(req.userId));
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -961,7 +995,7 @@ router.delete("/:id", auth, async (req, res) => {
     return res
       .status(200)
       .json({ message: "Group deleted with all data erased" });
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
     return res.status(500).json({ error: "Internal server error" });
   }
@@ -972,10 +1006,10 @@ router.get(
   auth,
   async (req, res) => {
     try {
-      const conversationId = parseInt(req.params.conversationId);
-      const messageId = parseInt(req.params.messageId);
+      const conversationId = parseInt(req.params.conversationId as string);
+      const messageId = parseInt(req.params.messageId as string);
 
-      const user = await findUser(req.userId);
+      const user = await findUser(Number(req.userId));
 
       if (!user) {
         return res.status(404).json({ error: "User not found" });
@@ -1016,7 +1050,7 @@ router.get(
       });
 
       return res.status(200).json(messageReadUsersDetails);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching message read status:", error);
 
       return res.status(500).json({
@@ -1031,13 +1065,13 @@ router.get(
   auth,
   async (req, res) => {
     try {
-      const conversationId = parseId(req.params.conversationId);
-      const messageId = parseId(req.params.messageId);
+      const conversationId = parseId(req.params.conversationId as string);
+      const messageId = parseId(req.params.messageId as string);
 
       const validated = await findForPin(
         conversationId,
         messageId,
-        req.userId,
+        Number(req.userId),
         res,
       );
       if (!validated) return;
@@ -1049,7 +1083,7 @@ router.get(
       });
 
       return res.status(200).json(pinnedMsgs);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching the pinned message: ", error);
 
       return res.status(500).json({
@@ -1064,14 +1098,14 @@ router.post(
   auth,
   async (req, res) => {
     try {
-      const conversationId = parseId(req.params.conversationId);
-      const messageId = parseId(req.params.messageId);
-      const userId = parseId(req.userId);
+      const conversationId = parseId(req.params.conversationId as string);
+      const messageId = parseId(req.params.messageId as string);
+      const userId = parseId(String(req.userId));
 
       const validated = await findForPin(
         conversationId,
         messageId,
-        req.userId,
+        Number(req.userId),
         res,
       );
       if (!validated) return;
@@ -1086,7 +1120,7 @@ router.post(
       });
 
       if (isMsgPinned)
-        return res.status().json({ error: "Message is already pinned" });
+        return res.status(409).json({ error: "Message is already pinned" });
       const pinMsg = await prisma.pinnedMessage.create({
         data: {
           messageId: messageId,
@@ -1096,7 +1130,7 @@ router.post(
         },
       });
       return res.status(200).json(pinMsg);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error pinning message: ", error);
 
       return res.status(500).json({
@@ -1111,13 +1145,13 @@ router.delete(
   auth,
   async (req, res) => {
     try {
-      const conversationId = parseId(req.params.conversationId);
-      const messageId = parseId(req.params.messageId);
+      const conversationId = parseId(req.params.conversationId as string);
+      const messageId = parseId(req.params.messageId as string);
 
       const validated = await findForPin(
         conversationId,
         messageId,
-        req.userId,
+        Number(req.userId),
         res,
       );
       if (!validated) return;
@@ -1132,7 +1166,7 @@ router.delete(
       });
 
       if (!isMsgPinned)
-        return res.status().json({ error: "Pinned Message not found" });
+        return res.status(404).json({ error: "Pinned Message not found" });
       const pinMsg = await prisma.pinnedMessage.delete({
         where: {
           conversationId_messageId: {
@@ -1142,7 +1176,7 @@ router.delete(
         },
       });
       return res.status(200).json(pinMsg);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error removing the pinned message: ", error);
 
       return res.status(500).json({

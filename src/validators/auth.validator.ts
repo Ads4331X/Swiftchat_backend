@@ -1,6 +1,6 @@
 import validator from "validator";
 
-export function validateUsername(username) {
+export function validateUsername(username: string) {
   const cleanUsername = username?.trim();
 
   if (!cleanUsername) {
@@ -14,7 +14,7 @@ export function validateUsername(username) {
   return { data: cleanUsername };
 }
 
-export function validateEmail(email) {
+export function validateEmail(email: string) {
   const cleanEmail = email?.trim().toLowerCase();
 
   if (!cleanEmail) {
@@ -28,7 +28,7 @@ export function validateEmail(email) {
   return { data: cleanEmail };
 }
 
-export function validatePassword(password) {
+export function validatePassword(password: string) {
   if (!password) {
     return { error: "Password is required" };
   }
@@ -52,7 +52,10 @@ export function validatePassword(password) {
   return { data: password };
 }
 
-export function validatePasswordMatch(password, confirmPassword) {
+export function validatePasswordMatch(
+  password: string,
+  confirmPassword: string,
+) {
   if (!confirmPassword) {
     return { error: "Please confirm your password" };
   }
@@ -64,12 +67,19 @@ export function validatePasswordMatch(password, confirmPassword) {
   return { data: true };
 }
 
+type RegisterData = {
+  username: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+};
+
 export default function validateRegister({
   username,
   email,
   password,
   confirmPassword,
-}) {
+}: RegisterData) {
   const usernameResult = validateUsername(username);
   if (usernameResult.error) return usernameResult;
 
@@ -88,5 +98,6 @@ export default function validateRegister({
       email: emailResult.data,
       password: passwordResult.data,
     },
+    error: false,
   };
 }

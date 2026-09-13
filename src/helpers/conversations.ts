@@ -1,51 +1,60 @@
 import prisma from "../prisma.js";
+import type { Response } from "express";
+import type { Server } from "socket.io";
 
-export function parseId(value) {
-  return parseInt(value);
+export function parseId(value: string): number {
+  return parseInt(value, 10);
 }
 
-export function normalizeNonce(nonce) {
-  return typeof nonce === "string" ? nonce : Buffer.from(nonce).toString("base64");
+export function normalizeNonce(nonce: string | Buffer): string {
+  return typeof nonce === "string" ? nonce : nonce.toString("base64");
 }
 
-export async function findMember(conversationId, userId) {
-  return await prisma.conversationMember.findUnique({
+export async function findMember(conversationId: number, userId: number) {
+  return prisma.conversationMember.findUnique({
     where: { conversationId_userId: { conversationId, userId } },
   });
 }
 
-export async function findMessage(messageId) {
+export async function findMessage(messageId: number) {
   return await prisma.message.findUnique({
     where: { id: messageId },
   });
 }
 
-export function validateMessageId(messageId, res) {
+export function validateMessageId(messageId: number, res: Response): boolean {
   if (!Number.isInteger(messageId)) {
     res.status(400).json({ error: "Invalid message ID" });
     return true;
   }
+
   return false;
 }
 
-export function validateEmoji(emoji, res) {
-  if (!emoji || typeof emoji !== "string") {
+export function validateEmoji(emoji: string, res: Response): boolean {
+  if (!emoji) {
     res.status(400).json({ error: "Emoji is required" });
     return true;
   }
+
   return false;
 }
 
-export function emitToConversation(io, conversationId, event, data) {
+export function emitToConversation(
+  io: Server,
+  conversationId: number,
+  event: string,
+  data: unknown,
+): void {
   io.to(String(conversationId)).emit(event, data);
 }
 
-export function handleError(res) {
+export function handleError(res: Response): Response {
   return res.status(500).json({ error: "Internal server error" });
 }
 
 // find a user by id
-export async function findUser(userId) {
+export async function findUser(userId: number) {
   return await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, username: true, avatar: true },
@@ -53,24 +62,34 @@ export async function findUser(userId) {
 }
 
 // check if user is the admin (creator) of the conversation
-export async function checkAdmin(conversationId, userId) {
+export async function checkAdmin(conversationId: number, userId: number) {
   return await prisma.conversation.findFirst({
     where: { id: conversationId, createdById: userId },
   });
 }
 
 // ensure user is a member, return null with 403 if not
-export async function ensureMember(conversationId, userId, res) {
+export async function ensureMember(
+  conversationId: number,
+  userId: number,
+  res: Response,
+) {
   const member = await findMember(conversationId, userId);
   if (!member) {
-    res.status(403).json({ error: "You are not a member of this conversation" });
+    res
+      .status(403)
+      .json({ error: "You are not a member of this conversation" });
     return null;
   }
   return member;
 }
 
 // find a message and check ownership, return null with error if any check fails
-export async function findAndValidateMessage(messageId, userId, res) {
+export async function findAndValidateMessage(
+  messageId: number,
+  userId: number,
+  res: Response,
+) {
   const message = await findMessage(messageId);
 
   if (!message) {
@@ -87,8 +106,13 @@ export async function findAndValidateMessage(messageId, userId, res) {
 }
 
 // validate user, membership, message and admin for the pin endpoints
-export async function findForPin(conversationId, messageId, userId, res) {
-  if (!userId) {
+export async function findForPin(
+  conversationId: number,
+  messageId: number,
+  userId: number,
+  res: Response,
+) {
+  if (!Number.isInteger(userId) || userId <= 0) {
     res.status(404).json({ error: "User not found" });
     return null;
   }
@@ -96,7 +120,9 @@ export async function findForPin(conversationId, messageId, userId, res) {
   const member = await findMember(conversationId, userId);
 
   if (!member) {
-    res.status(404).json({ error: "User is not a member of this conversation" });
+    res
+      .status(404)
+      .json({ error: "User is not a member of this conversation" });
     return null;
   }
 
@@ -124,7 +150,12 @@ export async function findForPin(conversationId, messageId, userId, res) {
 }
 
 // handle reaction upsert (used by both add and update)
-export async function handleReaction(messageId, userId, emoji, res) {
+export async function handleReaction(
+  messageId: number,
+  userId: number,
+  emoji: string,
+  res: Response,
+) {
   const message = await findMessage(messageId);
 
   if (!message) {
