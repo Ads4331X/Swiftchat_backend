@@ -16,6 +16,7 @@ import {
   findAndValidateMessage,
   handleReaction,
   findForPin,
+  findForPinRead,
 } from "../helpers/conversations.js";
 
 const router = express.Router();
@@ -65,13 +66,24 @@ router.get("/", auth, async (req, res) => {
     });
 
     // clean the response by removing the current user from members
-    const cleaned = sorted.map((conv) => ({
-      id: conv.id,
-      name: conv.name,
-      createdById: conv.createdById,
-      members: conv.members.map((m) => m.user).filter((u) => u.id !== userId),
-      lastMessage: conv.messages[0] ?? null,
-    }));
+    const cleaned = sorted.map((conv) => {
+      const myMembership = conv.members.find(
+        (m) => m.userId === userId,
+      );
+      const clearedAt = myMembership?.clearedAt;
+      const lastMessage = conv.messages[0] ?? null;
+
+      return {
+        id: conv.id,
+        name: conv.name,
+        createdById: conv.createdById,
+        members: conv.members.map((m) => m.user).filter((u) => u.id !== userId),
+        lastMessage:
+          lastMessage && clearedAt && new Date(lastMessage.sentAt) <= new Date(clearedAt)
+            ? null
+            : lastMessage,
+      };
+    });
 
     return res.json(cleaned);
   } catch (error: any) {
@@ -106,8 +118,9 @@ router.post("/new-conversation", auth, async (req, res) => {
         .status(400)
         .json({ error: "You can't create a group with yourself" });
 
-    // check if conversation already exists between these two users
-    const existingConversation = await prisma.conversation.findFirst({
+    // Check for an exact 1:1 conversation only. Group chats must never be
+    // treated as a direct conversation just because both people belong to them.
+    const matchingConversations = await prisma.conversation.findMany({
       where: {
         AND: [
           { members: { some: { userId: Number(req.userId) } } },
@@ -123,6 +136,18 @@ router.post("/new-conversation", auth, async (req, res) => {
       },
     });
 
+    const existingConversation = matchingConversations.find((conversation) => {
+      const uniqueMemberIds = new Set(
+        conversation.members.map((member) => member.userId),
+      );
+
+      return (
+        uniqueMemberIds.size === 2 &&
+        uniqueMemberIds.has(userId) &&
+        uniqueMemberIds.has(targetedUser.id)
+      );
+    });
+
     if (existingConversation) {
       return res.status(200).json({
         message: "Conversation already exists",
@@ -130,12 +155,20 @@ router.post("/new-conversation", auth, async (req, res) => {
       });
     }
 
-    // create the conversation
+    // Create a direct conversation and return its members so the client can
+    // route to the correct 1:1 chat instead of a group chat.
     const newConversation = await prisma.conversation.create({
       data: {
         createdById: userId,
         members: {
           create: [{ userId: userId }, { userId: targetedUser.id }],
+        },
+      },
+      include: {
+        members: {
+          include: {
+            user: { select: { id: true, username: true, avatar: true } },
+          },
         },
       },
     });
@@ -163,12 +196,15 @@ router.get("/messages/:conversationId", auth, async (req, res) => {
 
     const membership = await ensureMember(conversationId, userId, res);
     if (!membership) return;
+    const clearedAt = membership.clearedAt;
 
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
     const before = parseInt(req.query.before as string);
 
     const where: any = { conversationId };
-
+    if (clearedAt) {
+      where.sentAt = { gt: clearedAt };
+    }
     if (before) {
       const cursorMessage = await prisma.message.findFirst({
         where: { id: before },
@@ -177,6 +213,9 @@ router.get("/messages/:conversationId", auth, async (req, res) => {
 
       if (cursorMessage) {
         where.sentAt = { lt: cursorMessage.sentAt };
+        if (clearedAt) {
+          where.sentAt = { gt: clearedAt, lt: cursorMessage.sentAt };
+        }
       }
     }
 
@@ -1068,7 +1107,7 @@ router.get(
       const conversationId = parseId(req.params.conversationId as string);
       const messageId = parseId(req.params.messageId as string);
 
-      const validated = await findForPin(
+      const validated = await findForPinRead(
         conversationId,
         messageId,
         Number(req.userId),
@@ -1185,5 +1224,55 @@ router.delete(
     }
   },
 );
+
+router.post("/:conversationId/clear", auth, async (req, res) => {
+  try {
+    const user = await findUser(Number(req.userId));
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const conversationId = parseId(req.params.conversationId as string);
+
+    const member = await findMember(conversationId, user.id);
+
+    if (!member) {
+      return res.status(404).json({
+        error: "User is not a member of this conversation",
+      });
+    }
+
+    const clearedAt = new Date();
+
+    await prisma.conversationMember.upsert({
+      where: {
+        conversationId_userId: {
+          conversationId: Number(conversationId),
+          userId: Number(user.id),
+        },
+      },
+      create: {
+        conversationId: Number(conversationId),
+        userId: Number(user.id),
+        clearedAt,
+      },
+      update: {
+        clearedAt,
+      },
+    });
+
+    return res.status(200).json({
+      message: "Conversation cleared successfully",
+      clearedAt: clearedAt,
+    });
+  } catch (error: any) {
+    console.error("Error clearing conversation:", error);
+
+    return res.status(500).json({
+      error: "Failed to clear conversation",
+    });
+  }
+});
 
 export default router;

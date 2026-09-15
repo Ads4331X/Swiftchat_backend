@@ -105,6 +105,37 @@ export async function findAndValidateMessage(
   return message;
 }
 
+// validate user, membership and message for reading pin status (GET)
+export async function findForPinRead(
+  conversationId: number,
+  messageId: number,
+  userId: number,
+  res: Response,
+) {
+  if (!Number.isInteger(userId) || userId <= 0) {
+    res.status(404).json({ error: "User not found" });
+    return null;
+  }
+
+  const member = await findMember(conversationId, userId);
+
+  if (!member) {
+    res
+      .status(404)
+      .json({ error: "User is not a member of this conversation" });
+    return null;
+  }
+
+  const message = await findMessage(messageId);
+
+  if (!message) {
+    res.status(404).json({ error: "Message not found" });
+    return null;
+  }
+
+  return { message, conversationId };
+}
+
 // validate user, membership, message and admin for the pin endpoints
 export async function findForPin(
   conversationId: number,

@@ -46,12 +46,11 @@ model PasswordResetToken {
 }
 
 model Conversation {
-  id          Int      @id @default(autoincrement())
-  createdAt   DateTime @default(now())
-  createdById Int
-  name        String?
-  creator     User     @relation(fields: [createdById], references: [id])
-
+  id             Int                  @id @default(autoincrement())
+  createdAt      DateTime             @default(now())
+  createdById    Int
+  name           String?
+  creator        User                 @relation(fields: [createdById], references: [id])
   members        ConversationMember[]
   messages       Message[]
   messageReads   MessageRead[]
@@ -64,6 +63,7 @@ model ConversationMember {
   userId                   Int
   encryptedConversationKey String?
   nonce                    String?
+  clearedAt                DateTime?
   conversation             Conversation @relation(fields: [conversationId], references: [id])
   user                     User         @relation(fields: [userId], references: [id])
 
