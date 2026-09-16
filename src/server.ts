@@ -1,12 +1,11 @@
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
-import auth from "./routes/auth.js";
-import user from "./routes/user.js";
-import conversation from "./routes/conversations.js";
+import auth from "./routes/auth.routes.js";
+import user from "./routes/user.routes.js";
+import conversation from "./routes/conversations.routes.js";
 import { Server } from "socket.io";
 import http from "http";
-import jwt from "jsonwebtoken";
 import { setupSocket } from "./socket.js";
 
 const app = express();
@@ -38,7 +37,7 @@ app.use("/api/auth", auth);
 app.use("/api/user", user);
 app.use("/api/conversations", conversation);
 
-app.get("/", (req, res) => {
+app.get("/", (_req, res) => {
   res.json({ message: "Chat API is running" });
 });
 

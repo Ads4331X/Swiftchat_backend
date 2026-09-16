@@ -4,7 +4,7 @@ import type { Request, Response, NextFunction } from "express";
 const JWT_SECRET: string = process.env.JWT_SECRET ?? "";
 
 interface AuthRequest extends Request {
-  userId?: string;
+  userId?: number;
 }
 
 export default function auth(
@@ -25,7 +25,12 @@ export default function auth(
       return res.status(401).json({ error: "Invalid token" });
     }
 
-    req.userId = String(decoded.userId);
+    const userId = Number(decoded.userId);
+    if (!Number.isFinite(userId)) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    req.userId = userId;
 
     next();
   } catch {

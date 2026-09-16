@@ -1,6 +1,6 @@
 import prisma from "../prisma.js";
-import type { Response } from "express";
 import type { Server } from "socket.io";
+import { AppError } from "../errors/AppError.js";
 
 export function parseId(value: string): number {
   return parseInt(value, 10);
@@ -22,22 +22,16 @@ export async function findMessage(messageId: number) {
   });
 }
 
-export function validateMessageId(messageId: number, res: Response): boolean {
+export function validateMessageId(messageId: number): void {
   if (!Number.isInteger(messageId)) {
-    res.status(400).json({ error: "Invalid message ID" });
-    return true;
+    throw new AppError("Invalid message ID", 400);
   }
-
-  return false;
 }
 
-export function validateEmoji(emoji: string, res: Response): boolean {
+export function validateEmoji(emoji: string): void {
   if (!emoji) {
-    res.status(400).json({ error: "Emoji is required" });
-    return true;
+    throw new AppError("Emoji is required", 400);
   }
-
-  return false;
 }
 
 export function emitToConversation(
@@ -47,10 +41,6 @@ export function emitToConversation(
   data: unknown,
 ): void {
   io.to(String(conversationId)).emit(event, data);
-}
-
-export function handleError(res: Response): Response {
-  return res.status(500).json({ error: "Internal server error" });
 }
 
 // find a user by id
@@ -68,38 +58,28 @@ export async function checkAdmin(conversationId: number, userId: number) {
   });
 }
 
-// ensure user is a member, return null with 403 if not
-export async function ensureMember(
-  conversationId: number,
-  userId: number,
-  res: Response,
-) {
+// ensure user is a member
+export async function ensureMember(conversationId: number, userId: number) {
   const member = await findMember(conversationId, userId);
   if (!member) {
-    res
-      .status(403)
-      .json({ error: "You are not a member of this conversation" });
-    return null;
+    throw new AppError("You are not a member of this conversation", 403);
   }
   return member;
 }
 
-// find a message and check ownership, return null with error if any check fails
+// find a message and check ownership
 export async function findAndValidateMessage(
   messageId: number,
   userId: number,
-  res: Response,
 ) {
   const message = await findMessage(messageId);
 
   if (!message) {
-    res.status(404).json({ error: "Message not found" });
-    return null;
+    throw new AppError("Message not found", 404);
   }
 
   if (message.senderId !== userId) {
-    res.status(403).json({ error: "You can only modify your own messages" });
-    return null;
+    throw new AppError("You can only modify your own messages", 403);
   }
 
   return message;
@@ -110,27 +90,21 @@ export async function findForPinRead(
   conversationId: number,
   messageId: number,
   userId: number,
-  res: Response,
 ) {
   if (!Number.isInteger(userId) || userId <= 0) {
-    res.status(404).json({ error: "User not found" });
-    return null;
+    throw new AppError("User not found", 404);
   }
 
   const member = await findMember(conversationId, userId);
 
   if (!member) {
-    res
-      .status(404)
-      .json({ error: "User is not a member of this conversation" });
-    return null;
+    throw new AppError("User is not a member of this conversation", 404);
   }
 
   const message = await findMessage(messageId);
 
   if (!message) {
-    res.status(404).json({ error: "Message not found" });
-    return null;
+    throw new AppError("Message not found", 404);
   }
 
   return { message, conversationId };
@@ -141,27 +115,21 @@ export async function findForPin(
   conversationId: number,
   messageId: number,
   userId: number,
-  res: Response,
 ) {
   if (!Number.isInteger(userId) || userId <= 0) {
-    res.status(404).json({ error: "User not found" });
-    return null;
+    throw new AppError("User not found", 404);
   }
 
   const member = await findMember(conversationId, userId);
 
   if (!member) {
-    res
-      .status(404)
-      .json({ error: "User is not a member of this conversation" });
-    return null;
+    throw new AppError("User is not a member of this conversation", 404);
   }
 
   const message = await findMessage(messageId);
 
   if (!message) {
-    res.status(404).json({ error: "Message not found" });
-    return null;
+    throw new AppError("Message not found", 404);
   }
 
   // groups with more than 2 members can only be managed by the admin
@@ -173,34 +141,8 @@ export async function findForPin(
     conversationMembers.length > 2 &&
     !(await checkAdmin(conversationId, userId))
   ) {
-    res.status(403).json({ error: "You are not the admin of the group" });
-    return null;
+    throw new AppError("You are not the admin of the group", 403);
   }
 
   return { message, conversationId };
-}
-
-// handle reaction upsert (used by both add and update)
-export async function handleReaction(
-  messageId: number,
-  userId: number,
-  emoji: string,
-  res: Response,
-) {
-  const message = await findMessage(messageId);
-
-  if (!message) {
-    res.status(404).json({ error: "Message not found" });
-    return null;
-  }
-
-  const reaction = await prisma.messageReaction.upsert({
-    where: {
-      messageId_userId: { messageId: message.id, userId },
-    },
-    update: { emoji },
-    create: { userId, messageId: message.id, emoji },
-  });
-
-  return { reaction, message };
 }
