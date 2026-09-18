@@ -140,14 +140,34 @@ export async function createConversation({
 export async function getEncryptedMemberKey({
   conversationId,
   userId,
+  requesterId,
   nonce,
   encryptedKey,
 }: {
   conversationId: number;
   userId: number;
+  requesterId: number;
   nonce: string;
   encryptedKey: string;
 }) {
+  /*
+   * Only the member who generated the conversation key may seal members'
+   * copies. All copies are encrypted with that member's private key, so a
+   * copy sealed by anyone else could never be opened by its recipient.
+   * Legacy conversations (keyCreatedById = NULL) keep the old behavior.
+   */
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { keyCreatedById: true },
+  });
+
+  if (
+    conversation?.keyCreatedById != null &&
+    conversation.keyCreatedById !== requesterId
+  ) {
+    throw new AppError("Only the key creator can distribute the conversation key", 403);
+  }
+
   // stores the encrypted conversation key for the target user
   await prisma.conversationMember.update({
     where: {
@@ -167,7 +187,7 @@ export async function getEncryptedKey({
   conversationId: number;
   userId: number;
 }) {
-  return prisma.conversationMember.findUnique({
+  const member = await prisma.conversationMember.findUnique({
     where: {
       conversationId_userId: {
         conversationId,
@@ -180,8 +200,88 @@ export async function getEncryptedKey({
       conversation: {
         select: {
           createdById: true,
+          keyCreatedById: true,
         },
       },
     },
+  });
+
+  if (!member) return null;
+
+  const {
+    conversation,
+    encryptedConversationKey,
+    nonce,
+  } = member;
+
+  // FLAT shape, matching what the client expects. `keyCreatedById` records who
+  // actually generated/sealed the conversation key (NOT always the creator),
+  // so recipients can open their copy with the correct public key.
+  // Legacy conversations (keyCreatedById = NULL) fall back to the creator.
+  return {
+    encryptedConversationKey,
+    nonce,
+    createdById: conversation.createdById,
+    keyCreatedById: conversation.keyCreatedById,
+    senderUserId: conversation.keyCreatedById ?? conversation.createdById,
+  };
+}
+
+/**
+ * Claims the right to generate the conversation key for a conversation.
+ *
+ * The first member to call this becomes the "key creator" and is the only one
+ * allowed to seal per-member copies. A transactional conditional-update makes
+ * concurrent claims race-safe (only one wins). Refuses to claim once any
+ * member already holds an encrypted key copy (legacy conversation).
+ */
+export async function claimConversationKey({
+  conversationId,
+  userId,
+}: {
+  conversationId: number;
+  userId: number;
+}) {
+  return prisma.$transaction(async (tx) => {
+    const conversation = await tx.conversation.findUnique({
+      where: { id: conversationId },
+      select: {
+        keyCreatedById: true,
+        members: {
+          select: { encryptedConversationKey: true },
+        },
+      },
+    });
+
+    if (!conversation) {
+      throw new AppError("Conversation not found", 404);
+    }
+
+    if (conversation.keyCreatedById != null) {
+      return { claimed: false, keyCreatedById: conversation.keyCreatedById };
+    }
+
+    const alreadyHasKey = conversation.members.some(
+      (m) => m.encryptedConversationKey != null,
+    );
+    if (alreadyHasKey) {
+      return { claimed: false, keyCreatedById: null, alreadyHasKey: true };
+    }
+
+    const updated = await tx.conversation.updateMany({
+      where: { id: conversationId, keyCreatedById: null },
+      data: { keyCreatedById: userId },
+    });
+
+    if (updated.count === 0) {
+      // Lost a concurrent claim — another device generated the key first.
+      const winner = await tx.conversation.findUnique({
+        where: { id: conversationId },
+        select: { keyCreatedById: true },
+      });
+      return { claimed: false, keyCreatedById: winner?.keyCreatedById ?? null };
+    }
+
+    return { claimed: true, keyCreatedById: userId };
   });
 }

@@ -62,6 +62,7 @@ export async function getEncryptedMemberKey(req: Request, res: Response) {
     await ConversationServices.getEncryptedMemberKey({
       conversationId,
       userId,
+      requesterId: req.userId!,
       nonce,
       encryptedKey,
     });
@@ -88,6 +89,29 @@ export async function getEncryptedKey(req: Request, res: Response) {
       return res.status(403).json({
         error: "You are not a member of this conversation",
       });
+    }
+
+    return res.status(200).json(result);
+  } catch (err) {
+    return handleError(err, res);
+  }
+}
+
+export async function claimKey(req: Request, res: Response) {
+  try {
+    const conversationId = parseId(req.params.id as string);
+    const userId = req.userId!;
+
+    // check if requester is a member
+    await ensureMember(conversationId, userId);
+
+    const result = await ConversationServices.claimConversationKey({
+      conversationId,
+      userId,
+    });
+
+    if (!result.claimed) {
+      return res.status(409).json(result);
     }
 
     return res.status(200).json(result);

@@ -30,6 +30,8 @@ router.put(
 
 router.get("/:id/key", auth, conversationController.getEncryptedKey);
 
+router.post("/:id/key", auth, conversationController.claimKey);
+
 router.post(
   "/messages/:conversationId/mark-read",
   auth,

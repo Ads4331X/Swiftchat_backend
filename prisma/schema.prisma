@@ -29,6 +29,7 @@ model User {
   reactions            MessageReaction[]
   passwordResetTokens  PasswordResetToken[]
   conversationsCreated Conversation[]
+  keyCreatedConversations Conversation[] @relation("KeyCreator")
   messageReads         MessageRead[]
   pinnedMessages       PinnedMessage[]
 }
@@ -50,7 +51,16 @@ model Conversation {
   createdAt      DateTime             @default(now())
   createdById    Int
   name           String?
+  /*
+   * The member who generated and sealed the shared conversation key. This is
+   * NOT always the conversation creator: the first device to open the chat
+   * generates the key. Every device decrypts the per-member key copy using
+   * THIS user's public key (falling back to createdById for legacy rows),
+   * because all copies are sealed with this user's private key.
+   */
+  keyCreatedById Int?
   creator        User                 @relation(fields: [createdById], references: [id])
+  keyCreator     User?                @relation("KeyCreator", fields: [keyCreatedById], references: [id])
   members        ConversationMember[]
   messages       Message[]
   messageReads   MessageRead[]

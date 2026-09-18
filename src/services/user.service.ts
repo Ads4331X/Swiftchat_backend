@@ -17,6 +17,7 @@ export async function getUserDetails(userId: number) {
       username: true,
       email: true,
       created_at: true,
+      publicKey: true,
     },
   });
   // check if user exists or not
@@ -161,6 +162,31 @@ export async function deleteAccount({ userId }: { userId: number }) {
 
   // delete all the user data in a single transaction
   await prisma.$transaction(async (tx) => {
+    const ownMessageIds = await tx.message
+      .findMany({
+        where: { senderId: userId },
+        select: { id: true },
+      })
+      .then((ms) => ms.map((m) => m.id));
+
+    // reactions either created by the user or sitting on the user's messages
+    await tx.messageReaction.deleteMany({
+      where: { OR: [{ userId: userId }, { messageId: { in: ownMessageIds } }] },
+    });
+
+    // pins either created by the user or pinned on the user's messages
+    await tx.pinnedMessage.deleteMany({
+      where: {
+        OR: [{ pinnedById: userId }, { messageId: { in: ownMessageIds } }],
+      },
+    });
+
+    // detach replies that point at messages we're about to delete
+    await tx.message.updateMany({
+      where: { replyToId: { in: ownMessageIds } },
+      data: { replyToId: null },
+    });
+
     // deletes all the messages sent by the user
     await tx.message.deleteMany({ where: { senderId: userId } });
 
@@ -168,6 +194,27 @@ export async function deleteAccount({ userId }: { userId: number }) {
     await tx.conversationMember.deleteMany({
       where: { userId: userId },
     });
+
+    // a user can't be deleted while still the creator of a conversation that
+    // other members keep using (Conversation.createdById FK). Reassign the
+    // creator role to the earliest remaining member.
+    const orphanedConversations = await tx.conversation.findMany({
+      where: { createdById: userId },
+      select: { id: true },
+    });
+    for (const conversation of orphanedConversations) {
+      const replacement = await tx.conversationMember.findFirst({
+        where: { conversationId: conversation.id },
+        orderBy: { id: "asc" },
+        select: { userId: true },
+      });
+      if (replacement) {
+        await tx.conversation.update({
+          where: { id: conversation.id },
+          data: { createdById: replacement.userId },
+        });
+      }
+    }
 
     // find conversations that are now empty and delete them
     if (conversationIds.length > 0) {
@@ -182,6 +229,24 @@ export async function deleteAccount({ userId }: { userId: number }) {
 
       // delete the empty conversations and their messages
       if (emptyConversationIds.length > 0) {
+        const emptyMessageIds = await tx.message
+          .findMany({
+            where: { conversationId: { in: emptyConversationIds } },
+            select: { id: true },
+          })
+          .then((ms) => ms.map((m) => m.id));
+
+        // clear dependents first so the FK on every delete is satisfied
+        await tx.messageReaction.deleteMany({
+          where: { messageId: { in: emptyMessageIds } },
+        });
+        await tx.pinnedMessage.deleteMany({
+          where: { conversationId: { in: emptyConversationIds } },
+        });
+        await tx.message.updateMany({
+          where: { replyToId: { in: emptyMessageIds } },
+          data: { replyToId: null },
+        });
         await tx.message.deleteMany({
           where: { conversationId: { in: emptyConversationIds } },
         });
@@ -191,7 +256,9 @@ export async function deleteAccount({ userId }: { userId: number }) {
       }
     }
 
-    // deletes the user account
+    // deletes the user account. Remaining FKs are satisfied: PasswordResetToken
+    // and MessageRead cascade, and the conversation-key creator role is
+    // ON DELETE SET NULL.
     await tx.user.delete({ where: { id: userId } });
   });
 

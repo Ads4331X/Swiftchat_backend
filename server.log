@@ -1,3 +1,284 @@
 Server running on port 3000
 - Local:   http://localhost:3000
 - Network: http://192.168.1.72:3000
+(node:184734) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+PrismaClientValidationError: 
+Invalid `prisma.user.findUnique()` invocation in
+/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:42
+
+  367   targetedUserId: number;
+  368 }) {
+  369   // check if the targeted user exists or not
+→ 370   const targetedUser = await prisma.user.findUnique({
+          where: {
+        +   id: Int
+          },
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+            created_at: true,
+            lastSeen: true
+          }
+        })
+
+Argument `id` is missing.
+    at throwValidationException (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/core/errorRendering/throwValidationException.ts:46:9)
+    at Jr.handleRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:211:7)
+    at Jr.handleAndLogRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:183:12)
+    at Jr.request (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:152:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async a (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:1014:24)
+    at async Module.getOtherUser (/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:24)
+    at async getOtherUser (/home/erza/git_projects/chat-app/server/src/controllers/user.controller.ts:233:20) {
+  clientVersion: '7.10.0'
+}
+PrismaClientValidationError: 
+Invalid `prisma.user.findUnique()` invocation in
+/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:42
+
+  367   targetedUserId: number;
+  368 }) {
+  369   // check if the targeted user exists or not
+→ 370   const targetedUser = await prisma.user.findUnique({
+          where: {
+        +   id: Int
+          },
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+            created_at: true,
+            lastSeen: true
+          }
+        })
+
+Argument `id` is missing.
+    at throwValidationException (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/core/errorRendering/throwValidationException.ts:46:9)
+    at Jr.handleRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:211:7)
+    at Jr.handleAndLogRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:183:12)
+    at Jr.request (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:152:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async a (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:1014:24)
+    at async Module.getOtherUser (/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:24)
+    at async getOtherUser (/home/erza/git_projects/chat-app/server/src/controllers/user.controller.ts:233:20) {
+  clientVersion: '7.10.0'
+}
+PrismaClientValidationError: 
+Invalid `prisma.user.findUnique()` invocation in
+/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:42
+
+  367   targetedUserId: number;
+  368 }) {
+  369   // check if the targeted user exists or not
+→ 370   const targetedUser = await prisma.user.findUnique({
+          where: {
+        +   id: Int
+          },
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+            created_at: true,
+            lastSeen: true
+          }
+        })
+
+Argument `id` is missing.
+    at throwValidationException (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/core/errorRendering/throwValidationException.ts:46:9)
+    at Jr.handleRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:211:7)
+    at Jr.handleAndLogRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:183:12)
+    at Jr.request (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:152:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async a (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:1014:24)
+    at async Module.getOtherUser (/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:24)
+    at async getOtherUser (/home/erza/git_projects/chat-app/server/src/controllers/user.controller.ts:233:20) {
+  clientVersion: '7.10.0'
+}
+PrismaClientValidationError: 
+Invalid `prisma.user.findUnique()` invocation in
+/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:42
+
+  367   targetedUserId: number;
+  368 }) {
+  369   // check if the targeted user exists or not
+→ 370   const targetedUser = await prisma.user.findUnique({
+          where: {
+        +   id: Int
+          },
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+            created_at: true,
+            lastSeen: true
+          }
+        })
+
+Argument `id` is missing.
+    at throwValidationException (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/core/errorRendering/throwValidationException.ts:46:9)
+    at Jr.handleRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:211:7)
+    at Jr.handleAndLogRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:183:12)
+    at Jr.request (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:152:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async a (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:1014:24)
+    at async Module.getOtherUser (/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:24)
+    at async getOtherUser (/home/erza/git_projects/chat-app/server/src/controllers/user.controller.ts:233:20) {
+  clientVersion: '7.10.0'
+}
+PrismaClientValidationError: 
+Invalid `prisma.user.findUnique()` invocation in
+/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:42
+
+  367   targetedUserId: number;
+  368 }) {
+  369   // check if the targeted user exists or not
+→ 370   const targetedUser = await prisma.user.findUnique({
+          where: {
+        +   id: Int
+          },
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+            created_at: true,
+            lastSeen: true
+          }
+        })
+
+Argument `id` is missing.
+    at throwValidationException (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/core/errorRendering/throwValidationException.ts:46:9)
+    at Jr.handleRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:211:7)
+    at Jr.handleAndLogRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:183:12)
+    at Jr.request (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:152:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async a (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:1014:24)
+    at async Module.getOtherUser (/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:24)
+    at async getOtherUser (/home/erza/git_projects/chat-app/server/src/controllers/user.controller.ts:233:20) {
+  clientVersion: '7.10.0'
+}
+PrismaClientValidationError: 
+Invalid `prisma.user.findUnique()` invocation in
+/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:42
+
+  367   targetedUserId: number;
+  368 }) {
+  369   // check if the targeted user exists or not
+→ 370   const targetedUser = await prisma.user.findUnique({
+          where: {
+        +   id: Int
+          },
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+            created_at: true,
+            lastSeen: true
+          }
+        })
+
+Argument `id` is missing.
+    at throwValidationException (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/core/errorRendering/throwValidationException.ts:46:9)
+    at Jr.handleRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:211:7)
+    at Jr.handleAndLogRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:183:12)
+    at Jr.request (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:152:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async a (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:1014:24)
+    at async Module.getOtherUser (/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:24)
+    at async getOtherUser (/home/erza/git_projects/chat-app/server/src/controllers/user.controller.ts:233:20) {
+  clientVersion: '7.10.0'
+}
+PrismaClientValidationError: 
+Invalid `prisma.user.findUnique()` invocation in
+/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:42
+
+  367   targetedUserId: number;
+  368 }) {
+  369   // check if the targeted user exists or not
+→ 370   const targetedUser = await prisma.user.findUnique({
+          where: {
+        +   id: Int
+          },
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+            created_at: true,
+            lastSeen: true
+          }
+        })
+
+Argument `id` is missing.
+    at throwValidationException (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/core/errorRendering/throwValidationException.ts:46:9)
+    at Jr.handleRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:211:7)
+    at Jr.handleAndLogRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:183:12)
+    at Jr.request (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:152:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async a (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:1014:24)
+    at async Module.getOtherUser (/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:24)
+    at async getOtherUser (/home/erza/git_projects/chat-app/server/src/controllers/user.controller.ts:233:20) {
+  clientVersion: '7.10.0'
+}
+PrismaClientValidationError: 
+Invalid `prisma.user.findUnique()` invocation in
+/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:42
+
+  367   targetedUserId: number;
+  368 }) {
+  369   // check if the targeted user exists or not
+→ 370   const targetedUser = await prisma.user.findUnique({
+          where: {
+        +   id: Int
+          },
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+            created_at: true,
+            lastSeen: true
+          }
+        })
+
+Argument `id` is missing.
+    at throwValidationException (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/core/errorRendering/throwValidationException.ts:46:9)
+    at Jr.handleRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:211:7)
+    at Jr.handleAndLogRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:183:12)
+    at Jr.request (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:152:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async a (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:1014:24)
+    at async Module.getOtherUser (/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:24)
+    at async getOtherUser (/home/erza/git_projects/chat-app/server/src/controllers/user.controller.ts:233:20) {
+  clientVersion: '7.10.0'
+}
+PrismaClientValidationError: 
+Invalid `prisma.user.findUnique()` invocation in
+/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:42
+
+  367   targetedUserId: number;
+  368 }) {
+  369   // check if the targeted user exists or not
+→ 370   const targetedUser = await prisma.user.findUnique({
+          where: {
+        +   id: Int
+          },
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+            created_at: true,
+            lastSeen: true
+          }
+        })
+
+Argument `id` is missing.
+    at throwValidationException (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/core/errorRendering/throwValidationException.ts:46:9)
+    at Jr.handleRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:211:7)
+    at Jr.handleAndLogRequestError (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:183:12)
+    at Jr.request (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/RequestHandler.ts:152:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async a (/home/erza/git_projects/chat-app/server/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:1014:24)
+    at async Module.getOtherUser (/home/erza/git_projects/chat-app/server/src/services/user.service.ts:370:24)
+    at async getOtherUser (/home/erza/git_projects/chat-app/server/src/controllers/user.controller.ts:233:20) {
+  clientVersion: '7.10.0'
+}

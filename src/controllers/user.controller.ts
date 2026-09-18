@@ -110,9 +110,7 @@ export async function searchUser(req: Request, res: Response) {
       username: String(username),
     });
 
-    return res.status(200).json({
-      result,
-    });
+    return res.status(200).json(result);
   } catch (err) {
     handleError(err, res);
   }
@@ -180,7 +178,7 @@ export async function getKeyBackUp(req: Request, res: Response) {
     const userId = req.userId!;
 
     const result = await userServices.getKeyBackUp({ userId });
-    return res.status(200).json({ result });
+    return res.status(200).json(result);
   } catch (err) {
     return handleError(err, res);
   }
