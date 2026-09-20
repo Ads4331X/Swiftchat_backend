@@ -35,12 +35,39 @@ export function setupSocket(io: Server) {
   });
 
   io.on("connection", async (socket: AuthenticatedSocket) => {
+    // make a user active on connection
+    await prisma.user.update({
+      data: {
+        lastSeen: null,
+      },
+      where: { id: Number(socket.userId) },
+    });
+
     const members = await prisma.conversationMember.findMany({
       where: { userId: socket.userId ?? 0 },
     });
 
     members.forEach((member) => {
       void socket.join(String(member.conversationId));
+    });
+
+    io.emit("presence", {
+      userId: socket.userId,
+      lastSeen: null,
+    });
+    // make a user unactive on connection
+    socket.on("disconnect", async () => {
+      const updatedLastSeen = await prisma.user.update({
+        data: {
+          lastSeen: new Date(),
+        },
+        where: { id: Number(socket.userId) },
+      });
+
+      io.emit("presence", {
+        userId: socket.userId,
+        lastSeen: updatedLastSeen.lastSeen,
+      });
     });
 
     socket.on("join-conversation", async (id: string) => {

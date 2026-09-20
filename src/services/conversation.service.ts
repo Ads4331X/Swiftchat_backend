@@ -12,7 +12,7 @@ export async function getConversations({ userId }: { userId: number }) {
       members: {
         include: {
           user: {
-            select: { id: true, username: true, avatar: true },
+            select: { id: true, username: true, avatar: true, lastSeen: true },
           },
         },
       },
