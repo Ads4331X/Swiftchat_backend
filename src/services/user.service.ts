@@ -8,6 +8,7 @@ import {
   validatePasswordMatch,
   validateUsername,
 } from "../validators/auth.validator.js";
+import cloudinary from "../config/cloudinary.js";
 
 export async function getUserDetails(userId: number) {
   // gets the user details
@@ -381,4 +382,31 @@ export async function getOtherUser({
   if (!targetedUser) throw new AppError("User not found", 400);
 
   return targetedUser;
+}
+
+export async function updateAvatar({
+  userId,
+  avatar,
+}: {
+  userId: number;
+  avatar: string;
+}) {
+  const upload = await cloudinary.uploader.upload(avatar, {
+    folder: "swiftchat/avatars",
+    resource_type: "image",
+    public_id: userId.toString(),
+    overwrite: true,
+    quality: "auto",
+  });
+
+  if (!upload || !upload.secure_url) {
+    throw new AppError("Failed to upload avatar", 500);
+  }
+  // updates the avatar for the user
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: { avatar: upload.secure_url },
+    select: { id: true, username: true, avatar: true },
+  });
+  return updatedUser;
 }

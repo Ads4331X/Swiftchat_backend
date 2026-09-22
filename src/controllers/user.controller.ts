@@ -237,3 +237,28 @@ export async function getOtherUser(req: Request, res: Response) {
     return handleError(err, res);
   }
 }
+
+export async function updateAvatar(req: Request, res: Response) {
+  try {
+    const userId = req.userId!;
+    const { avatar } = req.body;
+
+    // check if the avatar is empty or not
+    if (!avatar)
+      return res.status(400).json({
+        error: "Avatar is required",
+      });
+
+    const result = await userServices.updateAvatar({ userId, avatar });
+    return res.status(200).json({
+      message: result,
+    });
+  } catch (err: any) {
+    if (err?.code === "P2025")
+      return res.status(404).json({
+        error: "User not found",
+      });
+
+    return handleError(err, res);
+  }
+}

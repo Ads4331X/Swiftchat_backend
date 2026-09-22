@@ -38,25 +38,54 @@ export async function getConversations({ userId }: { userId: number }) {
   });
 
   // clean the response by removing the current user from members
-  const cleaned = sorted.map((conv) => {
+  const cleaned = [];
+
+  for (const conv of sorted) {
     const myMembership = conv.members.find((m) => m.userId === userId);
+
     const clearedAt = myMembership?.clearedAt;
     const lastMessage = conv.messages[0] ?? null;
 
-    return {
+    const latestReadAt = await prisma.messageRead.findFirst({
+      where: {
+        userId,
+        conversationId: conv.id,
+      },
+      select: {
+        conversationId: true,
+        readAt: true,
+      },
+      orderBy: {
+        readAt: "desc",
+      },
+    });
+
+    const unread = await prisma.message.count({
+      where: {
+        conversationId: conv.id,
+        senderId: { not: userId },
+        sentAt: {
+          gt: latestReadAt?.readAt ?? new Date(0),
+        },
+      },
+    });
+
+    cleaned.push({
       id: conv.id,
       name: conv.name,
       createdById: conv.createdById,
-      members: conv.members.map((m) => m.user).filter((u) => u.id !== userId),
+      members: conv.members
+        .map((member) => member.user)
+        .filter((member) => member != null && member.id !== userId),
       lastMessage:
         lastMessage &&
         clearedAt &&
         new Date(lastMessage.sentAt) <= new Date(clearedAt)
           ? null
           : lastMessage,
-    };
-  });
-
+      unread,
+    });
+  }
   return cleaned;
 }
 
@@ -165,7 +194,10 @@ export async function getEncryptedMemberKey({
     conversation?.keyCreatedById != null &&
     conversation.keyCreatedById !== requesterId
   ) {
-    throw new AppError("Only the key creator can distribute the conversation key", 403);
+    throw new AppError(
+      "Only the key creator can distribute the conversation key",
+      403,
+    );
   }
 
   // stores the encrypted conversation key for the target user
@@ -208,11 +240,7 @@ export async function getEncryptedKey({
 
   if (!member) return null;
 
-  const {
-    conversation,
-    encryptedConversationKey,
-    nonce,
-  } = member;
+  const { conversation, encryptedConversationKey, nonce } = member;
 
   // FLAT shape, matching what the client expects. `keyCreatedById` records who
   // actually generated/sealed the conversation key (NOT always the creator),

@@ -1,10 +1,18 @@
 import * as express from "express";
 import auth from "../middleware/auth.js";
 import * as userController from "../controllers/user.controller.js";
+import { upload } from "../config/multer.js";
 
 const router = express.Router();
 
 router.get("/user-details", auth, userController.getUserDetails);
+
+router.post(
+  "/update-profile-picture",
+  auth,
+  upload.single("avatar"),
+  userController.updateAvatar,
+);
 
 router.patch("/update-user-info", auth, userController.updateUserInfo);
 
