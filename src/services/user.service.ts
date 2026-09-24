@@ -8,15 +8,17 @@ import {
   validatePasswordMatch,
   validateUsername,
 } from "../validators/auth.validator.js";
-import cloudinary from "../config/cloudinary.js";
+import { uploadAvatar } from "../helpers/cloudinaryAvatar.js";
 
 export async function getUserDetails(userId: number) {
   // gets the user details
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
+      id: true,
       username: true,
       email: true,
+      avatar: true,
       created_at: true,
       publicKey: true,
     },
@@ -389,24 +391,28 @@ export async function updateAvatar({
   avatar,
 }: {
   userId: number;
-  avatar: string;
+  avatar: Express.Multer.File;
 }) {
-  const upload = await cloudinary.uploader.upload(avatar, {
-    folder: "swiftchat/avatars",
-    resource_type: "image",
-    public_id: userId.toString(),
-    overwrite: true,
-    quality: "auto",
-  });
+  const upload = await uploadAvatar(avatar.buffer, userId);
 
   if (!upload || !upload.secure_url) {
     throw new AppError("Failed to upload avatar", 500);
   }
-  // updates the avatar for the user
+
+  const avatarUrl = upload.secure_url.replace(
+    "/image/upload/",
+    `/image/upload/v${Date.now()}/`,
+  );
+
   const updatedUser = await prisma.user.update({
     where: { id: userId },
-    data: { avatar: upload.secure_url },
-    select: { id: true, username: true, avatar: true },
+    data: { avatar: avatarUrl },
+    select: {
+      id: true,
+      username: true,
+      avatar: true,
+    },
   });
+
   return updatedUser;
 }
