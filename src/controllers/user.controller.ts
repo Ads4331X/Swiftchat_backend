@@ -229,7 +229,7 @@ export async function updateKeyBackUp(req: Request, res: Response) {
 export async function getOtherUser(req: Request, res: Response) {
   try {
     // gets the targeted user id
-    const targetedUserId = parseInt(String(req.params.id));
+    const targetedUserId = parseId(req.params.id as string);
     const result = await userServices.getOtherUser({ targetedUserId });
 
     return res.status(200).json(result);
@@ -242,8 +242,7 @@ export async function updateAvatar(req: Request, res: Response) {
   try {
     const userId = req.userId!;
     const avatar = req.file;
-    console.log("UPDATE AVATAR REQUEST");
-    console.log("FILE:", req.file);
+
     if (!avatar) {
       return res.status(400).json({
         error: "Avatar is required",
@@ -265,6 +264,48 @@ export async function updateAvatar(req: Request, res: Response) {
       });
     }
 
+    return handleError(err, res);
+  }
+}
+
+export async function blockUser(req: Request, res: Response) {
+  try {
+    const userId = req.userId!;
+    const blockedUserId = parseId(String(req.body.blockedUserId));
+
+    if (userId === blockedUserId) {
+      return res.status(400).json({ error: "You cannot block yourself" });
+    }
+
+    const block = await userServices.blockUser({ userId, blockedUserId });
+    return res.status(200).json(block);
+  } catch (err) {
+    return handleError(err, res);
+  }
+}
+
+export async function getBlockedUsers(req: Request, res: Response) {
+  try {
+    const userId = req.userId!;
+    const blockedUsers = await userServices.getBlockedUsers({ userId });
+    return res.status(200).json(blockedUsers);
+  } catch (err) {
+    return handleError(err, res);
+  }
+}
+
+export async function unblockUser(req: Request, res: Response) {
+  try {
+    const userId = req.userId!;
+    const toUnblockUserId = parseId(String(req.body.toUnblockUserId));
+
+    if (userId === toUnblockUserId) {
+      return res.status(400).json({ error: "You cannot unblock yourself" });
+    }
+
+    const unblock = await userServices.unblockUser({ userId, toUnblockUserId });
+    return res.status(200).json(unblock);
+  } catch (err) {
     return handleError(err, res);
   }
 }

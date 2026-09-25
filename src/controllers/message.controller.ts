@@ -25,10 +25,13 @@ export async function getMessages(req: Request, res: Response) {
 
     const clearedAt = membership.clearedAt;
 
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const limit = Math.min(
+      req.query.limit ? parseId(String(req.query.limit)) : 50,
+      200,
+    );
 
     const before = req.query.before
-      ? parseInt(req.query.before as string)
+      ? parseId(String(req.query.before))
       : undefined;
 
     const messages = await messageService.getMessages({
@@ -55,19 +58,20 @@ export async function sendMessages(req: Request, res: Response) {
       forwardedFromMsgId: rawForwardedFromMsgId,
     } = req.body;
 
-    const conversationId = parseId(rawConversationId);
-    const forwardedFromMsgId = rawForwardedFromMsgId
-      ? parseId(rawForwardedFromMsgId)
-      : null;
-    const replyToId = rawReplyToId ? parseId(rawReplyToId) : null;
     const senderId = req.userId!;
 
     // check if the required fields are present or not
-    if (!messageText || !nonce || Number.isNaN(conversationId)) {
+    if (!messageText || !nonce || !rawConversationId) {
       return res.status(400).json({
         error: "messageText, nonce, and conversationId are required",
       });
     }
+
+    const conversationId = parseId(String(rawConversationId));
+    const forwardedFromMsgId = rawForwardedFromMsgId
+      ? parseId(String(rawForwardedFromMsgId))
+      : null;
+    const replyToId = rawReplyToId ? parseId(String(rawReplyToId)) : null;
 
     const normalizedNonce = normalizeNonce(nonce);
 
@@ -154,23 +158,12 @@ export async function deleteMessage(req: Request, res: Response) {
 
 export async function getMessageReadStatus(req: Request, res: Response) {
   try {
-    const conversationId = parseInt(req.params.conversationId as string);
-    const messageId = parseInt(req.params.messageId as string);
+    const conversationId = parseId(req.params.conversationId as string);
+    const messageId = parseId(req.params.messageId as string);
+    const userId = req.userId!;
 
-    const user = await findUser(req.userId!);
-
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    const member = await findMember(conversationId, user.id);
-
-    if (!member)
-      return res
-        .status(404)
-        .json({ error: "User is not a member of this conversation" });
-
-    const message = await findMessage(messageId);
-
-    if (!message) return res.status(404).json({ error: "Message not found" });
+    // validates user exists, membership and that the message exists
+    await findForPinRead(conversationId, messageId, userId);
 
     const messageReadUsersDetails = await messageService.getMessageReadStatus({
       messageId,
@@ -187,7 +180,7 @@ export async function markMessagesAsRead(req: Request, res: Response) {
   try {
     // gets the user id, conversation id and message id
     const userId = req.userId!;
-    const conversationId = Number(req.params.conversationId as string);
+    const conversationId = parseId(req.params.conversationId as string);
     const { messageId } = req.body;
 
     // check if the required fields are present or not

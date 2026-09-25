@@ -33,4 +33,8 @@ router.get("/key-backup", auth, userController.getKeyBackUp);
 router.put("/key-backup", auth, userController.updateKeyBackUp);
 
 router.get("/:id", auth, userController.getOtherUser);
+
+router.post("/block", auth, userController.blockUser);
+router.get("/blocks", auth, userController.getBlockedUsers);
+router.delete("/block", auth, userController.unblockUser);
 export default router;

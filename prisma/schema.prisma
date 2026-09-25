@@ -8,30 +8,32 @@ datasource db {
 }
 
 model User {
-  id                   Int                  @id @default(autoincrement())
-  username             String               @unique
-  nickanme             String?
-  email                String               @unique
-  password_hash        String
-  created_at           DateTime             @default(now())
-  updated_at           DateTime             @updatedAt
-  lastSeen             DateTime?
-  avatar               String               @default("")
-  publicKey            String?
-  keyBackupEncrypted   String?
-  keyBackupNonce       String?
-  keyBackupSalt        String?
-  keyBackupOpsLimit    Int?
-  keyBackupMemLimit    Int?
-  keyBackupAlg         Int?
-  conversationMembers  ConversationMember[]
-  messages             Message[]
-  reactions            MessageReaction[]
-  passwordResetTokens  PasswordResetToken[]
-  conversationsCreated Conversation[]
-  keyCreatedConversations Conversation[] @relation("KeyCreator")
-  messageReads         MessageRead[]
-  pinnedMessages       PinnedMessage[]
+  id                      Int                  @id @default(autoincrement())
+  username                String               @unique
+  nickanme                String?
+  email                   String               @unique
+  password_hash           String
+  created_at              DateTime             @default(now())
+  updated_at              DateTime             @updatedAt
+  lastSeen                DateTime?
+  avatar                  String               @default("")
+  publicKey               String?
+  keyBackupEncrypted      String?
+  keyBackupNonce          String?
+  keyBackupSalt           String?
+  keyBackupOpsLimit       Int?
+  keyBackupMemLimit       Int?
+  keyBackupAlg            Int?
+  conversationMembers     ConversationMember[]
+  messages                Message[]
+  reactions               MessageReaction[]
+  passwordResetTokens     PasswordResetToken[]
+  conversationsCreated    Conversation[]
+  keyCreatedConversations Conversation[]       @relation("KeyCreator")
+  messageReads            MessageRead[]
+  pinnedMessages          PinnedMessage[]
+  userBlocksMade          UserBlock[]          @relation("BlocksMade")
+  userBlocksReceived      UserBlock[]          @relation("BlocksReceived")
 }
 
 model PasswordResetToken {
@@ -51,7 +53,7 @@ model Conversation {
   createdAt      DateTime             @default(now())
   createdById    Int
   name           String?
-  /*
+  /**
    * The member who generated and sealed the shared conversation key. This is
    * NOT always the conversation creator: the first device to open the chat
    * generates the key. Every device decrypts the per-member key copy using
@@ -149,4 +151,16 @@ model MessageRead {
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@unique([messageId, userId])
+}
+
+model UserBlock {
+  id        Int      @id @default(autoincrement())
+  blockerId Int
+  blockedId Int
+  createdAt DateTime @default(now())
+
+  blocker User @relation("BlocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
 }

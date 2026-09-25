@@ -7,7 +7,6 @@ import conversation from "./routes/conversations.routes.js";
 import { Server } from "socket.io";
 import http from "http";
 import { setupSocket } from "./socket.js";
-import { testCloudinary } from "./config/cloudinary.js";
 
 const app = express();
 // app.use(cors());
@@ -42,7 +41,6 @@ app.get("/", (_req, res) => {
   res.json({ message: "Chat API is running" });
 });
 
-testCloudinary();
 const PORT = Number(process.env.PORT) || 3000;
 
 server.listen(PORT, "0.0.0.0", () => {

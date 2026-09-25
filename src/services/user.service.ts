@@ -400,7 +400,7 @@ export async function updateAvatar({
   }
 
   const avatarUrl = upload.secure_url.replace(
-    "/image/upload/",
+    /\/image\/upload\/(?:v\d+\/)?/,
     `/image/upload/v${Date.now()}/`,
   );
 
@@ -413,6 +413,43 @@ export async function updateAvatar({
       avatar: true,
     },
   });
-
   return updatedUser;
+}
+
+export async function blockUser({
+  userId,
+  blockedUserId,
+}: {
+  userId: number;
+  blockedUserId: number;
+}) {
+  const block = await prisma.userBlock.create({
+    data: { blockerId: userId, blockedId: blockedUserId },
+  });
+  return block;
+}
+
+export async function getBlockedUsers({ userId }: { userId: number }) {
+  const blockedUsers = await prisma.userBlock.findMany({
+    where: { blockerId: userId },
+  });
+  return blockedUsers;
+}
+
+export async function unblockUser({
+  userId,
+  toUnblockUserId,
+}: {
+  userId: number;
+  toUnblockUserId: number;
+}) {
+  const unblock = await prisma.userBlock.delete({
+    where: {
+      blockerId_blockedId: {
+        blockerId: userId,
+        blockedId: toUnblockUserId,
+      },
+    },
+  });
+  return unblock;
 }

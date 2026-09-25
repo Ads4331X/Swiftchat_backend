@@ -3,7 +3,13 @@ import type { Server } from "socket.io";
 import { AppError } from "../errors/AppError.js";
 
 export function parseId(value: string): number {
-  return parseInt(value, 10);
+  const id = Number(value);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new AppError("Invalid ID", 400);
+  }
+
+  return id;
 }
 
 export function normalizeNonce(nonce: string | Buffer): string {
