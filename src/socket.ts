@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import prisma from "./prisma.js";
 import type { ExtendedError, Server, Socket } from "socket.io";
+import { canEmitToConversation, isUserBlocked } from "./helpers/helper.js";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "";
 
@@ -85,25 +86,39 @@ export function setupSocket(io: Server) {
 
     socket.on(
       "typing-start",
-      ({ conversationId }: { conversationId: string }) => {
+      async ({ conversationId }: { conversationId: string }) => {
         if (!conversationId) return;
 
-        void socket.to(String(conversationId)).emit("typing-start", {
+        const canEmit = await canEmitToConversation({
           conversationId: Number(conversationId),
-          userId: socket.userId,
+          senderId: Number(socket.userId),
         });
+
+        if (canEmit) {
+          void socket.to(String(conversationId)).emit("typing-start", {
+            conversationId: Number(conversationId),
+            userId: socket.userId,
+          });
+        }
       },
     );
 
     socket.on(
       "typing-stop",
-      ({ conversationId }: { conversationId: string }) => {
+      async ({ conversationId }: { conversationId: string }) => {
         if (!conversationId) return;
 
-        void socket.to(String(conversationId)).emit("typing-stop", {
+        const canEmit = await canEmitToConversation({
           conversationId: Number(conversationId),
-          userId: socket.userId,
+          senderId: Number(socket.userId),
         });
+
+        if (canEmit) {
+          void socket.to(String(conversationId)).emit("typing-stop", {
+            conversationId: Number(conversationId),
+            userId: socket.userId,
+          });
+        }
       },
     );
   });

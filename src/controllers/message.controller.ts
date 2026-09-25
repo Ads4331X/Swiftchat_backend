@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import {
+  canEmitToConversation,
   emitToConversation,
   ensureMember,
   findAndValidateMessage,
@@ -8,6 +9,7 @@ import {
   findMember,
   findMessage,
   findUser,
+  isUserBlocked,
   normalizeNonce,
   parseId,
   validateEmoji,
@@ -15,6 +17,7 @@ import {
 } from "../helpers/helper.js";
 import * as messageService from "../services/message.service.js";
 import { handleError } from "../helpers/error.js";
+import prisma from "../prisma.js";
 
 export async function getMessages(req: Request, res: Response) {
   try {
@@ -39,6 +42,7 @@ export async function getMessages(req: Request, res: Response) {
       clearedAt,
       limit,
       before,
+      userId,
     });
 
     return res.json(messages);
@@ -49,7 +53,6 @@ export async function getMessages(req: Request, res: Response) {
 
 export async function sendMessages(req: Request, res: Response) {
   try {
-    // gets the message details from the user
     const {
       messageText,
       conversationId: rawConversationId,
@@ -60,7 +63,6 @@ export async function sendMessages(req: Request, res: Response) {
 
     const senderId = req.userId!;
 
-    // check if the required fields are present or not
     if (!messageText || !nonce || !rawConversationId) {
       return res.status(400).json({
         error: "messageText, nonce, and conversationId are required",
@@ -68,35 +70,42 @@ export async function sendMessages(req: Request, res: Response) {
     }
 
     const conversationId = parseId(String(rawConversationId));
+
     const forwardedFromMsgId = rawForwardedFromMsgId
       ? parseId(String(rawForwardedFromMsgId))
       : null;
+
     const replyToId = rawReplyToId ? parseId(String(rawReplyToId)) : null;
 
     const normalizedNonce = normalizeNonce(nonce);
 
-    // check if user is a member of the conversation
     await ensureMember(conversationId, senderId);
 
     const sendMessage = await messageService.sendMessages({
-      conversationId: conversationId,
-      senderId: senderId,
+      conversationId,
+      senderId,
       text: messageText,
       nonce: normalizedNonce,
-      replyToId: replyToId,
-      forwardedFromMsgId: forwardedFromMsgId,
+      replyToId,
+      forwardedFromMsgId,
     });
 
-    // emits the new message to all the members of the conversation
-    const io = req.app.get("io");
-    emitToConversation(io, conversationId, "new-message", sendMessage);
+    const canEmit = await canEmitToConversation({
+      conversationId,
+      senderId,
+    });
+
+    if (canEmit) {
+      const io = req.app.get("io");
+
+      emitToConversation(io, conversationId, "new-message", sendMessage);
+    }
 
     return res.status(201).json(sendMessage);
   } catch (err) {
     return handleError(err, res);
   }
 }
-
 export async function editMessage(req: Request, res: Response) {
   try {
     // gets the message details from the user

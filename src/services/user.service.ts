@@ -423,9 +423,20 @@ export async function blockUser({
   userId: number;
   blockedUserId: number;
 }) {
-  const block = await prisma.userBlock.create({
-    data: { blockerId: userId, blockedId: blockedUserId },
+  const block = await prisma.userBlock.upsert({
+    where: {
+      blockerId_blockedId: {
+        blockerId: userId,
+        blockedId: blockedUserId,
+      },
+    },
+    update: {},
+    create: {
+      blockerId: userId,
+      blockedId: blockedUserId,
+    },
   });
+
   return block;
 }
 

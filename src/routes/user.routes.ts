@@ -32,9 +32,11 @@ router.get("/key-backup", auth, userController.getKeyBackUp);
 
 router.put("/key-backup", auth, userController.updateKeyBackUp);
 
-router.get("/:id", auth, userController.getOtherUser);
-
+// Block routes must come before "/:id" so they aren't captured as a user id.
 router.post("/block", auth, userController.blockUser);
 router.get("/blocks", auth, userController.getBlockedUsers);
 router.delete("/block", auth, userController.unblockUser);
+
+router.get("/:id", auth, userController.getOtherUser);
+
 export default router;

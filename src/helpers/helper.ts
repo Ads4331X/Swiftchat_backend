@@ -152,3 +152,57 @@ export async function findForPin(
 
   return { message, conversationId };
 }
+
+export async function isUserBlocked({
+  blockerId,
+  blockedId,
+}: {
+  blockerId: number;
+  blockedId: number;
+}) {
+  const block = await prisma.userBlock.findUnique({
+    where: {
+      blockerId_blockedId: {
+        blockerId,
+        blockedId,
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  return !!block;
+}
+
+export async function canEmitToConversation({
+  conversationId,
+  senderId,
+}: {
+  conversationId: number;
+  senderId: number;
+}) {
+  const members = await prisma.conversationMember.findMany({
+    where: { conversationId },
+    select: { userId: true },
+  });
+
+  // Group
+  if (members.length > 2) {
+    return true;
+  }
+
+  // 1-to-1
+  const receiver = members.find((member) => member.userId !== senderId);
+
+  if (!receiver) {
+    return false;
+  }
+
+  const isBlocked = await isUserBlocked({
+    blockerId: receiver.userId,
+    blockedId: senderId,
+  });
+
+  return !isBlocked;
+}

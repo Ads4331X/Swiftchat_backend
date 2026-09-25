@@ -1,4 +1,5 @@
 import { AppError } from "../errors/AppError.js";
+import { isUserBlocked } from "../helpers/helper.js";
 import prisma from "../prisma.js";
 import { SendMessage } from "../types/message.type.js";
 
@@ -7,11 +8,13 @@ export async function getMessages({
   limit,
   before,
   conversationId,
+  userId,
 }: {
   clearedAt: Date | null;
   limit: number;
   before: number | undefined;
   conversationId: number;
+  userId: number;
 }) {
   const where: any = { conversationId };
 
@@ -29,6 +32,25 @@ export async function getMessages({
       if (clearedAt) {
         where.sentAt = { gt: clearedAt, lt: cursorMessage.sentAt };
       }
+    }
+  }
+
+  const members = await prisma.conversationMember.findMany({
+    where: { conversationId },
+    select: { userId: true },
+  });
+
+  // Match the socket layer (canEmitToConversation): in a 1:1, hide messages
+  // from a sender the requesting user has blocked. Without this, a refetch or
+  // reopen would surface messages that the live feed already suppressed.
+  if (members.length === 2) {
+    const otherId = members.find((member) => member.userId !== userId)?.userId;
+
+    if (
+      otherId != null &&
+      (await isUserBlocked({ blockerId: userId, blockedId: otherId }))
+    ) {
+      where.senderId = { not: otherId };
     }
   }
 

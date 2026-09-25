@@ -271,7 +271,7 @@ export async function updateAvatar(req: Request, res: Response) {
 export async function blockUser(req: Request, res: Response) {
   try {
     const userId = req.userId!;
-    const blockedUserId = parseId(String(req.body.blockedUserId));
+    const blockedUserId = parseId(String(req.body.userId));
 
     if (userId === blockedUserId) {
       return res.status(400).json({ error: "You cannot block yourself" });
@@ -297,7 +297,7 @@ export async function getBlockedUsers(req: Request, res: Response) {
 export async function unblockUser(req: Request, res: Response) {
   try {
     const userId = req.userId!;
-    const toUnblockUserId = parseId(String(req.body.toUnblockUserId));
+    const toUnblockUserId = parseId(String(req.body.userId));
 
     if (userId === toUnblockUserId) {
       return res.status(400).json({ error: "You cannot unblock yourself" });
