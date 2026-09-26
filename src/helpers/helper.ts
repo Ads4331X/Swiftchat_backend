@@ -206,3 +206,9 @@ export async function canEmitToConversation({
 
   return !isBlocked;
 }
+export async function findAttachment(messageId: number) {
+  const attachment = await prisma.attachment.findUnique({
+    where: { messageId },
+  });
+  return attachment;
+}

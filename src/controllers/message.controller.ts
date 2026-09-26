@@ -9,7 +9,6 @@ import {
   findMember,
   findMessage,
   findUser,
-  isUserBlocked,
   normalizeNonce,
   parseId,
   validateEmoji,
@@ -17,7 +16,6 @@ import {
 } from "../helpers/helper.js";
 import * as messageService from "../services/message.service.js";
 import { handleError } from "../helpers/error.js";
-import prisma from "../prisma.js";
 
 export async function getMessages(req: Request, res: Response) {
   try {

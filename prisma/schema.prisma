@@ -84,7 +84,7 @@ model ConversationMember {
 
 model Message {
   id    Int    @id @default(autoincrement())
-  text  String
+  text  String @default("")
   nonce String
 
   conversationId Int
@@ -105,6 +105,7 @@ model Message {
   reactions      MessageReaction[]
   conversation   Conversation      @relation(fields: [conversationId], references: [id])
   user           User              @relation(fields: [senderId], references: [id])
+  attachment     Attachment?
   messageReads   MessageRead[]
   pinnedMessages PinnedMessage[]
 
@@ -163,4 +164,13 @@ model UserBlock {
   blocked User @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
 
   @@unique([blockerId, blockedId])
+}
+
+model Attachment {
+  id        Int     @id() @default(autoincrement())
+  messageId Int     @unique
+  filePath  String
+  mimeType  String
+  fileSize  Int
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 }

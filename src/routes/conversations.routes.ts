@@ -3,7 +3,7 @@ import auth from "../middleware/auth.js";
 import * as conversationController from "../controllers/conversation.controller.js";
 import * as messageController from "../controllers/message.controller.js";
 import * as groupController from "../controllers/group.controller.js";
-
+import * as attachmentController from "../controllers/attachments.controller.js";
 const router = express.Router();
 
 router.get("/", auth, conversationController.getConversations);
@@ -86,5 +86,14 @@ router.delete(
 );
 
 router.post("/:conversationId/clear", auth, messageController.clearChat);
+
+router.get("/attachments/:messageId" , auth , attachmentController.getAttachment)
+router.post("/attachments", auth, attachmentController.sendAttachment);
+router.delete(
+  "/attachments/:messageId",
+  auth,
+  attachmentController.deleteAttachment,
+);
+
 
 export default router;
