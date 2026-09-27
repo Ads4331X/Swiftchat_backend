@@ -15,7 +15,9 @@ import {
   validateMessageId,
 } from "../helpers/helper.js";
 import * as messageService from "../services/message.service.js";
+import * as attachmentServices from "../services/attachments.services.js";
 import { handleError } from "../helpers/error.js";
+import { validateAttachment } from "../config/attachment.multer.js";
 
 export async function getMessages(req: Request, res: Response) {
   try {
@@ -50,6 +52,8 @@ export async function getMessages(req: Request, res: Response) {
 }
 
 export async function sendMessages(req: Request, res: Response) {
+  const file = req.file;
+
   try {
     const {
       messageText,
@@ -57,15 +61,33 @@ export async function sendMessages(req: Request, res: Response) {
       nonce,
       replyToId: rawReplyToId,
       forwardedFromMsgId: rawForwardedFromMsgId,
+      fileNonce,
     } = req.body;
 
     const senderId = req.userId!;
 
-    if (!messageText || !nonce || !rawConversationId) {
-      return res.status(400).json({
-        error: "messageText, nonce, and conversationId are required",
-      });
+    const text = typeof messageText === "string" ? messageText : "";
+    const hasText = text.trim().length > 0;
+
+    const reject = async (error: string) => {
+      if (file) await attachmentServices.removeUploadedFile(file.path);
+      return res.status(400).json({ error });
+    };
+
+    if (!rawConversationId) return reject("conversationId is required");
+
+    if (hasText && !nonce)
+      return reject("nonce is required when messageText is present");
+
+    if (file) {
+      if (!fileNonce) return reject("fileNonce is required when a file is uploaded");
+
+      const result = validateAttachment(file);
+      if (!result.valid) return reject(result.error);
     }
+
+    if (!hasText && !file)
+      return reject("messageText or an attachment is required");
 
     const conversationId = parseId(String(rawConversationId));
 
@@ -75,17 +97,19 @@ export async function sendMessages(req: Request, res: Response) {
 
     const replyToId = rawReplyToId ? parseId(String(rawReplyToId)) : null;
 
-    const normalizedNonce = normalizeNonce(nonce);
+    const normalizedNonce = nonce ? normalizeNonce(nonce) : null;
 
     await ensureMember(conversationId, senderId);
 
     const sendMessage = await messageService.sendMessages({
       conversationId,
       senderId,
-      text: messageText,
+      text,
       nonce: normalizedNonce,
       replyToId,
       forwardedFromMsgId,
+      ...(file ? { file } : {}),
+      ...(fileNonce ? { fileNonce } : {}),
     });
 
     const canEmit = await canEmitToConversation({
@@ -101,6 +125,7 @@ export async function sendMessages(req: Request, res: Response) {
 
     return res.status(201).json(sendMessage);
   } catch (err) {
+    if (file) await attachmentServices.removeUploadedFile(file.path);
     return handleError(err, res);
   }
 }

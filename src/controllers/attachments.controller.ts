@@ -30,29 +30,6 @@ export async function getAttachment(req: Request, res: Response) {
   }
 }
 
-export async function sendAttachment(req: Request, res: Response) {
-  try {
-    const { conversationId, messageId } = req.body;
-    const userId = req.userId!;
-    await ensureMember(conversationId, userId);
-
-    const attachment = req.file;
-    if (!attachment)
-      return res.status(400).json({ error: " No attachment send" });
-
-    const result = await attachmentServices.sendAttachment({
-      messageId,
-      file: attachment,
-    });
-
-    return res.status(200).json({
-      message: result,
-    });
-  } catch (err) {
-    return handleError(err, res);
-  }
-}
-
 export async function deleteAttachment(req: Request, res: Response) {
   try {
     const userId = req.userId!;

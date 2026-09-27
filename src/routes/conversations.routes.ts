@@ -4,6 +4,7 @@ import * as conversationController from "../controllers/conversation.controller.
 import * as messageController from "../controllers/message.controller.js";
 import * as groupController from "../controllers/group.controller.js";
 import * as attachmentController from "../controllers/attachments.controller.js";
+import { upload as attachmentUpload } from "../config/attachment.multer.js";
 const router = express.Router();
 
 router.get("/", auth, conversationController.getConversations);
@@ -16,7 +17,12 @@ router.post(
 
 router.get("/messages/:conversationId", auth, messageController.getMessages);
 
-router.post("/messages", auth, messageController.sendMessages);
+router.post(
+  "/messages",
+  auth,
+  attachmentUpload.single("file"),
+  messageController.sendMessages,
+);
 
 router.patch("/messages/:id", auth, messageController.editMessage);
 
@@ -88,7 +94,6 @@ router.delete(
 router.post("/:conversationId/clear", auth, messageController.clearChat);
 
 router.get("/attachments/:messageId" , auth , attachmentController.getAttachment)
-router.post("/attachments", auth, attachmentController.sendAttachment);
 router.delete(
   "/attachments/:messageId",
   auth,

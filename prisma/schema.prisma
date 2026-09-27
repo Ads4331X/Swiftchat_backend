@@ -83,9 +83,9 @@ model ConversationMember {
 }
 
 model Message {
-  id    Int    @id @default(autoincrement())
-  text  String @default("")
-  nonce String
+  id    Int     @id @default(autoincrement())
+  text  String  @default("")
+  nonce String?
 
   conversationId Int
   senderId       Int
@@ -172,5 +172,6 @@ model Attachment {
   filePath  String
   mimeType  String
   fileSize  Int
+  nonce     String?
   message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 }

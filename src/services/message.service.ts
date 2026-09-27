@@ -66,6 +66,7 @@ export async function getMessages({
           user: { select: { id: true } },
         },
       },
+      attachment: true,
     },
   });
 
@@ -101,8 +102,11 @@ export async function sendMessages({
   nonce: normalizedNonce,
   replyToId: replyToId,
   forwardedFromMsgId: forwardedFromMsgId,
+  file,
+  fileNonce,
 }: SendMessage) {
-  // creates a new message in the conversation
+  // creates a new message in the conversation, together with its optional
+  // attachment, in a single operation
   const message = await prisma.message.create({
     data: {
       conversationId: conversationId,
@@ -111,6 +115,18 @@ export async function sendMessages({
       nonce: normalizedNonce,
       replyToId: replyToId,
       forwardedFromMsgId: forwardedFromMsgId,
+      ...(file
+        ? {
+            attachment: {
+              create: {
+                filePath: file.path,
+                fileSize: file.size,
+                mimeType: file.mimetype,
+                nonce: fileNonce ?? null,
+              },
+            },
+          }
+        : {}),
     },
     include: {
       user: { select: { id: true, username: true, avatar: true } },
@@ -125,6 +141,7 @@ export async function sendMessages({
           user: { select: { id: true, username: true } },
         },
       },
+      attachment: true,
     },
   });
 

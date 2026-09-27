@@ -9,27 +9,8 @@ export async function getAttachment({ messageId }: { messageId: number }) {
   return attachment;
 }
 
-export async function sendAttachment({
-  messageId,
-  file,
-}: {
-  messageId: number;
-  file: Express.Multer.File;
-}) {
-  const filePath = file.path;
-  const mimeType = file.mimetype;
-  const fileSize = file.size;
-
-  const uploadAttachment = await prisma.attachment.create({
-    data: {
-      messageId,
-      filePath,
-      fileSize,
-      mimeType,
-    },
-  });
-
-  return uploadAttachment;
+export async function removeUploadedFile(filePath: string) {
+  await unlink(filePath).catch(() => {});
 }
 
 export async function deleteAttachment({ messageId }: { messageId: number }) {
