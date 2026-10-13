@@ -45,3 +45,23 @@ export async function deleteAttachment(req: Request, res: Response) {
     return handleError(err, res);
   }
 }
+
+export async function getAttachmentMetadata(req: Request, res: Response) {
+  try {
+    const userId = req.userId!;
+    const messageId = parseId(req.params.messageId as string);
+
+    const message = await findMessage(messageId);
+    if (!message) return res.status(400).json({ error: "Message not found" });
+
+    await ensureMember(message.conversationId, userId);
+
+    const result = await attachmentServices.getAttachment({
+      messageId,
+    });
+
+    return res.json(result);
+  } catch (err) {
+    return handleError(err, res);
+  }
+}

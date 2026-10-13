@@ -167,11 +167,16 @@ model UserBlock {
 }
 
 model Attachment {
-  id        Int     @id() @default(autoincrement())
-  messageId Int     @unique
-  filePath  String
-  mimeType  String
-  fileSize  Int
-  nonce     String?
-  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  id               Int    @id @default(autoincrement())
+  messageId        Int    @unique
+  filePath         String
+  mimeType         String
+  fileSize         Int
+  encryptionHeader String
+
+  encryptedKey String
+  keyNonce     String
+  headerNonce  String
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 }

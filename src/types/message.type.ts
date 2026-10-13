@@ -6,5 +6,8 @@ export type SendMessage = {
   replyToId: number | null;
   forwardedFromMsgId: number | null;
   file?: Express.Multer.File;
-  fileNonce?: string;
+  encryptedKey?: string;
+  encryptedHeader?: string;
+  keyNonce?: string;
+  headerNonce?: string;
 };

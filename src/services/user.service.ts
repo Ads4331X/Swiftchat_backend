@@ -275,15 +275,36 @@ export async function updatePublicKey({
   userId: number;
   publicKey: string;
 }) {
-  // saves the public key for the user
-  await prisma.user.update({
+  // Never silently replace an already-registered identity key with a different
+  // one: every conversation key sealed to the old public key would be orphaned,
+  // and the recovery backup would no longer match the registered identity.
+  // A first registration (no key yet) and idempotent re-saves are still allowed.
+  //
+  // The write is conditional (updateMany) so concurrent requests cannot both
+  // pass a read-then-write check and race to register different keys.
+  const result = await prisma.user.updateMany({
     where: {
       id: userId,
+      OR: [{ publicKey: null }, { publicKey }],
     },
     data: {
       publicKey,
     },
   });
+
+  if (result.count === 0) {
+    const existing = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { publicKey: true },
+    });
+
+    if (!existing) throw new AppError("User not found", 404);
+
+    throw new AppError(
+      "A different public key is already registered for this account",
+      409,
+    );
+  }
 
   return "Public key saved";
 }

@@ -103,7 +103,10 @@ export async function sendMessages({
   replyToId: replyToId,
   forwardedFromMsgId: forwardedFromMsgId,
   file,
-  fileNonce,
+  encryptedKey,
+  encryptedHeader,
+  keyNonce,
+  headerNonce,
 }: SendMessage) {
   // creates a new message in the conversation, together with its optional
   // attachment, in a single operation
@@ -115,14 +118,17 @@ export async function sendMessages({
       nonce: normalizedNonce,
       replyToId: replyToId,
       forwardedFromMsgId: forwardedFromMsgId,
-      ...(file
+      ...(file && encryptedKey && encryptedHeader && keyNonce && headerNonce
         ? {
             attachment: {
               create: {
                 filePath: file.path,
                 fileSize: file.size,
                 mimeType: file.mimetype,
-                nonce: fileNonce ?? null,
+                encryptionHeader: encryptedHeader,
+                encryptedKey,
+                keyNonce,
+                headerNonce,
               },
             },
           }

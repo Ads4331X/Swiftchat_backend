@@ -61,7 +61,10 @@ export async function sendMessages(req: Request, res: Response) {
       nonce,
       replyToId: rawReplyToId,
       forwardedFromMsgId: rawForwardedFromMsgId,
-      fileNonce,
+      encryptedKey,
+      encryptedHeader,
+      keyNonce,
+      headerNonce,
     } = req.body;
 
     const senderId = req.userId!;
@@ -80,7 +83,10 @@ export async function sendMessages(req: Request, res: Response) {
       return reject("nonce is required when messageText is present");
 
     if (file) {
-      if (!fileNonce) return reject("fileNonce is required when a file is uploaded");
+      if (!encryptedKey || !encryptedHeader || !keyNonce || !headerNonce)
+        return reject(
+          "encryptedKey, encryptedHeader, keyNonce and headerNonce are required when a file is uploaded",
+        );
 
       const result = validateAttachment(file);
       if (!result.valid) return reject(result.error);
@@ -109,7 +115,10 @@ export async function sendMessages(req: Request, res: Response) {
       replyToId,
       forwardedFromMsgId,
       ...(file ? { file } : {}),
-      ...(fileNonce ? { fileNonce } : {}),
+      ...(encryptedKey ? { encryptedKey } : {}),
+      ...(encryptedHeader ? { encryptedHeader } : {}),
+      ...(keyNonce ? { keyNonce } : {}),
+      ...(headerNonce ? { headerNonce } : {}),
     });
 
     const canEmit = await canEmitToConversation({

@@ -93,12 +93,16 @@ router.delete(
 
 router.post("/:conversationId/clear", auth, messageController.clearChat);
 
-router.get("/attachments/:messageId" , auth , attachmentController.getAttachment)
+router.get("/attachments/:messageId", auth, attachmentController.getAttachment);
+router.get(
+  "/attachments/:messageId/metadata",
+  auth,
+  attachmentController.getAttachmentMetadata,
+);
 router.delete(
   "/attachments/:messageId",
   auth,
   attachmentController.deleteAttachment,
 );
-
 
 export default router;
