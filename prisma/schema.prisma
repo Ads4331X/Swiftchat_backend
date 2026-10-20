@@ -172,6 +172,7 @@ model Attachment {
   filePath         String
   mimeType         String
   fileSize         Int
+  fileName         String?
   encryptionHeader String
 
   encryptedKey String
