@@ -66,9 +66,12 @@ export async function sendMessages(req: Request, res: Response) {
       encryptedHeader,
       keyNonce,
       headerNonce,
+      keyEpoch: rawKeyEpoch,
     } = req.body;
 
     const senderId = req.userId!;
+
+    const keyEpoch = Number(rawKeyEpoch);
 
     const text = typeof messageText === "string" ? messageText : "";
     const hasText = text.trim().length > 0;
@@ -77,6 +80,10 @@ export async function sendMessages(req: Request, res: Response) {
       if (file) await attachmentServices.removeUploadedFile(file.path);
       return res.status(400).json({ error });
     };
+
+    if (!Number.isInteger(keyEpoch) || keyEpoch < 1) {
+      return reject("Valid keyEpoch is required");
+    }
 
     if (!rawConversationId) return reject("conversationId is required");
 
@@ -114,6 +121,7 @@ export async function sendMessages(req: Request, res: Response) {
       text,
       nonce: normalizedNonce,
       replyToId,
+      keyEpoch,
       forwardedFromMsgId,
       ...(file ? { file } : {}),
       ...(typeof fileName === "string" ? { fileName } : {}),

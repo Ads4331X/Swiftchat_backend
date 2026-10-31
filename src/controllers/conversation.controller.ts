@@ -38,38 +38,48 @@ export async function createConversation(req: Request, res: Response) {
 
 export async function getEncryptedMemberKey(req: Request, res: Response) {
   try {
-    // gets the required data ( conversation id and user id)
     const conversationId = parseId(req.params.id as string);
     const userId = parseId(req.params.userId as string);
-    const { encryptedKey, nonce } = req.body;
+    const { encryptedKey, nonce, epoch } = req.body;
 
-    // check if the required fields are present or not
-    if (!encryptedKey || !nonce)
-      return res
-        .status(400)
-        .json({ error: "encryptedKey and nonce are required" });
+    // Validate required fields
+    if (!encryptedKey || !nonce || epoch === undefined) {
+      return res.status(400).json({
+        error: "encryptedKey, nonce and epoch are required",
+      });
+    }
 
-    // check if requester is a member
+    // Validate epoch
+    if (!Number.isInteger(epoch) || epoch < 1) {
+      return res.status(400).json({
+        error: "Invalid key epoch",
+      });
+    }
+
+    // Check requester membership
     await ensureMember(conversationId, req.userId!);
 
-    // check if target user is a member
+    // Check target membership
     const targetMember = await findMember(conversationId, userId);
-    if (!targetMember)
+
+    if (!targetMember) {
       return res.status(404).json({
         error: "Target user is not a member of this conversation",
       });
+    }
 
     await ConversationServices.getEncryptedMemberKey({
       conversationId,
       userId,
       requesterId: req.userId!,
       nonce,
+      epoch,
       encryptedKey,
     });
 
-    return res
-      .status(200)
-      .json({ message: "Conversation key stored successfully" });
+    return res.status(200).json({
+      message: "Conversation key stored successfully",
+    });
   } catch (err) {
     return handleError(err, res);
   }
@@ -79,6 +89,9 @@ export async function getEncryptedKey(req: Request, res: Response) {
   try {
     const conversationId = parseId(req.params.id as string);
     const userId = req.userId!;
+
+    // check if user is the member or not
+    await ensureMember(conversationId, userId);
 
     const result = await ConversationServices.getEncryptedKey({
       conversationId,
@@ -90,6 +103,22 @@ export async function getEncryptedKey(req: Request, res: Response) {
         error: "You are not a member of this conversation",
       });
     }
+
+    return res.status(200).json(result);
+  } catch (err) {
+    return handleError(err, res);
+  }
+}
+
+export async function getHistoricalKeyPackages(req: Request, res: Response) {
+  try {
+    const conversationId = parseId(req.params.id as string);
+    const userId = req.userId!;
+
+    const result = await ConversationServices.getHistoricalKeyPackages({
+      conversationId,
+      userId,
+    });
 
     return res.status(200).json(result);
   } catch (err) {

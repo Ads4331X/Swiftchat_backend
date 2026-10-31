@@ -11,4 +11,5 @@ export type SendMessage = {
   encryptedHeader?: string;
   keyNonce?: string;
   headerNonce?: string;
+  keyEpoch: number;
 };

@@ -42,13 +42,20 @@ export async function addMembers(req: Request, res: Response) {
     if (!Array.isArray(userIds) || userIds.length === 0)
       return res.status(400).json({ error: "Invalid userIds send or null" });
 
-    // check if the user is a member of the conversation or not
-    await ensureMember(conversationId, req.userId!);
+    // check if the user is the admin of the group or not
+    const conversation = await checkAdmin(conversationId, req.userId!);
+
+    if (!conversation) {
+      return res.status(403).json({
+        error: "You are not the admin of the group",
+      });
+    }
 
     const addGroupMembers = await groupServices.addMembers({
       userIds,
       conversationId,
     });
+
     res.status(201).json({ added: addGroupMembers });
   } catch (err) {
     return handleError(err, res);

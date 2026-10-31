@@ -8,15 +8,15 @@ datasource db {
 }
 
 model User {
-  id                      Int                  @id @default(autoincrement())
-  username                String               @unique
+  id                      Int                      @id @default(autoincrement())
+  username                String                   @unique
   nickanme                String?
-  email                   String               @unique
+  email                   String                   @unique
   password_hash           String
-  created_at              DateTime             @default(now())
-  updated_at              DateTime             @updatedAt
+  created_at              DateTime                 @default(now())
+  updated_at              DateTime                 @updatedAt
   lastSeen                DateTime?
-  avatar                  String               @default("")
+  avatar                  String                   @default("")
   publicKey               String?
   keyBackupEncrypted      String?
   keyBackupNonce          String?
@@ -29,11 +29,14 @@ model User {
   reactions               MessageReaction[]
   passwordResetTokens     PasswordResetToken[]
   conversationsCreated    Conversation[]
-  keyCreatedConversations Conversation[]       @relation("KeyCreator")
+  keyCreatedConversations Conversation[]           @relation("KeyCreator")
   messageReads            MessageRead[]
   pinnedMessages          PinnedMessage[]
-  userBlocksMade          UserBlock[]          @relation("BlocksMade")
-  userBlocksReceived      UserBlock[]          @relation("BlocksReceived")
+  receivedKeyPackages     ConversationKeyPackage[] @relation("KeyPackageRecipient")
+  sentKeyPackages         ConversationKeyPackage[] @relation("KeyPackageSender")
+  receivedKeyReceipts     ConversationKeyReceipt[]
+  userBlocksMade          UserBlock[]              @relation("BlocksMade")
+  userBlocksReceived      UserBlock[]              @relation("BlocksReceived")
 }
 
 model PasswordResetToken {
@@ -49,10 +52,11 @@ model PasswordResetToken {
 }
 
 model Conversation {
-  id             Int                  @id @default(autoincrement())
-  createdAt      DateTime             @default(now())
-  createdById    Int
-  name           String?
+  id              Int                      @id @default(autoincrement())
+  createdAt       DateTime                 @default(now())
+  createdById     Int
+  name            String?
+  currentKeyEpoch Int                      @default(1)
   /**
    * The member who generated and sealed the shared conversation key. This is
    * NOT always the conversation creator: the first device to open the chat
@@ -60,13 +64,16 @@ model Conversation {
    * THIS user's public key (falling back to createdById for legacy rows),
    * because all copies are sealed with this user's private key.
    */
-  keyCreatedById Int?
-  creator        User                 @relation(fields: [createdById], references: [id])
-  keyCreator     User?                @relation("KeyCreator", fields: [keyCreatedById], references: [id])
-  members        ConversationMember[]
-  messages       Message[]
-  messageReads   MessageRead[]
-  pinnedMessages PinnedMessage[]
+  keyCreatedById  Int?
+  keyClaimedById  Int?
+  creator         User                     @relation(fields: [createdById], references: [id])
+  keyCreator      User?                    @relation("KeyCreator", fields: [keyCreatedById], references: [id])
+  members         ConversationMember[]
+  messages        Message[]
+  messageReads    MessageRead[]
+  pinnedMessages  PinnedMessage[]
+  keyPackages     ConversationKeyPackage[]
+  keyReceipts     ConversationKeyReceipt[]
 }
 
 model ConversationMember {
@@ -83,9 +90,10 @@ model ConversationMember {
 }
 
 model Message {
-  id    Int     @id @default(autoincrement())
-  text  String  @default("")
-  nonce String?
+  id       Int     @id @default(autoincrement())
+  text     String  @default("")
+  nonce    String?
+  keyEpoch Int     @default(1)
 
   conversationId Int
   senderId       Int
@@ -167,8 +175,8 @@ model UserBlock {
 }
 
 model Attachment {
-  id               Int    @id @default(autoincrement())
-  messageId        Int    @unique
+  id               Int     @id @default(autoincrement())
+  messageId        Int     @unique
   filePath         String
   mimeType         String
   fileSize         Int
@@ -180,4 +188,38 @@ model Attachment {
   headerNonce  String
 
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model ConversationKeyPackage {
+  id             Int    @id @default(autoincrement())
+  conversationId Int
+  userId         Int
+  epoch          Int
+  encryptedKey   String
+  nonce          String
+  senderUserId   Int
+  rejectedAt     DateTime?
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation("KeyPackageRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  sender       User         @relation("KeyPackageSender", fields: [senderUserId], references: [id])
+
+  @@unique([conversationId, userId, epoch, senderUserId])
+  @@index([conversationId, epoch])
+  @@index([userId, conversationId, epoch])
+}
+
+model ConversationKeyReceipt {
+  id             Int      @id @default(autoincrement())
+  conversationId Int
+  userId         Int
+  epoch          Int
+  acknowledgedAt DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId, epoch])
+  @@index([userId, conversationId, epoch])
 }

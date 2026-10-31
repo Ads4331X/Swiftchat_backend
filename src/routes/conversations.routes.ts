@@ -34,6 +34,8 @@ router.put(
   conversationController.getEncryptedMemberKey,
 );
 
+router.get("/:id/keys", auth, conversationController.getHistoricalKeyPackages);
+
 router.get("/:id/key", auth, conversationController.getEncryptedKey);
 
 router.post("/:id/key", auth, conversationController.claimKey);

@@ -170,44 +170,73 @@ export async function getEncryptedMemberKey({
   conversationId,
   userId,
   requesterId,
+  epoch,
   nonce,
   encryptedKey,
 }: {
   conversationId: number;
   userId: number;
   requesterId: number;
+  epoch: number;
   nonce: string;
   encryptedKey: string;
 }) {
-  /*
-   * Only the member who generated the conversation key may seal members'
-   * copies. All copies are encrypted with that member's private key, so a
-   * copy sealed by anyone else could never be opened by its recipient.
-   * Legacy conversations (keyCreatedById = NULL) keep the old behavior.
-   */
-  const conversation = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    select: { keyCreatedById: true },
-  });
+  const [conversation, requester, target] = await Promise.all([
+    prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: {
+        currentKeyEpoch: true,
+        keyClaimedById: true,
+      },
+    }),
 
-  if (
-    conversation?.keyCreatedById != null &&
-    conversation.keyCreatedById !== requesterId
-  ) {
-    throw new AppError(
-      "Only the key creator can distribute the conversation key",
-      403,
-    );
+    prisma.conversationMember.findUnique({
+      where: {
+        conversationId_userId: {
+          conversationId,
+          userId: requesterId,
+        },
+      },
+    }),
+
+    prisma.conversationMember.findUnique({
+      where: {
+        conversationId_userId: {
+          conversationId,
+          userId,
+        },
+      },
+    }),
+  ]);
+
+  if (!conversation) {
+    throw new AppError("Conversation not found", 404);
   }
 
-  // stores the encrypted conversation key for the target user
-  await prisma.conversationMember.update({
-    where: {
-      conversationId_userId: { conversationId, userId },
-    },
+  if (!requester) {
+    throw new AppError("You are not a conversation member", 403);
+  }
+
+  if (!target) {
+    throw new AppError("Target user is not a conversation member", 404);
+  }
+
+  if (epoch !== conversation.currentKeyEpoch) {
+    throw new AppError("Invalid key epoch", 400);
+  }
+
+  if (conversation.keyClaimedById !== requesterId) {
+    throw new AppError("You have not claimed this key epoch", 403);
+  }
+
+  await prisma.conversationKeyPackage.create({
     data: {
-      encryptedConversationKey: encryptedKey,
-      nonce: nonce,
+      conversationId,
+      userId,
+      epoch,
+      encryptedKey,
+      nonce,
+      senderUserId: requesterId,
     },
   });
 }
@@ -219,50 +248,99 @@ export async function getEncryptedKey({
   conversationId: number;
   userId: number;
 }) {
-  const member = await prisma.conversationMember.findUnique({
+  // gets the user's current key epoch
+  const conversation = await prisma.conversation.findUnique({
     where: {
-      conversationId_userId: {
-        conversationId,
-        userId,
-      },
-    },
-    select: {
-      encryptedConversationKey: true,
-      nonce: true,
-      conversation: {
-        select: {
-          createdById: true,
-          keyCreatedById: true,
-        },
-      },
+      id: conversationId,
     },
   });
 
-  if (!member) return null;
+  if (!conversation) return null;
 
-  const { conversation, encryptedConversationKey, nonce } = member;
+  const keyPackage = await prisma.conversationKeyPackage.findFirst({
+    where: {
+      conversationId,
+      userId,
+      epoch: conversation.currentKeyEpoch,
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
 
-  // FLAT shape, matching what the client expects. `keyCreatedById` records who
-  // actually generated/sealed the conversation key (NOT always the creator),
-  // so recipients can open their copy with the correct public key.
-  // Legacy conversations (keyCreatedById = NULL) fall back to the creator.
+  if (!keyPackage) throw new AppError("No Package Exists", 404);
+
   return {
-    encryptedConversationKey,
-    nonce,
+    encryptedConversationKey: keyPackage.encryptedKey,
+    nonce: keyPackage.nonce,
+    epoch: keyPackage.epoch,
     createdById: conversation.createdById,
     keyCreatedById: conversation.keyCreatedById,
-    senderUserId: conversation.keyCreatedById ?? conversation.createdById,
+    senderUserId: keyPackage.senderUserId,
   };
 }
 
-/**
- * Claims the right to generate the conversation key for a conversation.
- *
- * The first member to call this becomes the "key creator" and is the only one
- * allowed to seal per-member copies. A transactional conditional-update makes
- * concurrent claims race-safe (only one wins). Refuses to claim once any
- * member already holds an encrypted key copy (legacy conversation).
- */
+export async function getHistoricalKeyPackages({
+  conversationId,
+  userId,
+}: {
+  conversationId: number;
+  userId: number;
+}) {
+  const [conversation, member] = await Promise.all([
+    prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { currentKeyEpoch: true },
+    }),
+    prisma.conversationMember.findUnique({
+      where: {
+        conversationId_userId: {
+          conversationId,
+          userId,
+        },
+      },
+      select: { id: true },
+    }),
+  ]);
+
+  if (!conversation) {
+    throw new AppError("Conversation not found", 404);
+  }
+
+  if (!member) {
+    throw new AppError("You are not a conversation member", 403);
+  }
+
+  const [packages, receipts] = await Promise.all([
+    prisma.conversationKeyPackage.findMany({
+      where: {
+        conversationId,
+        userId,
+        epoch: { lt: conversation.currentKeyEpoch },
+      },
+      select: {
+        id: true,
+        epoch: true,
+        encryptedKey: true,
+        nonce: true,
+        senderUserId: true,
+      },
+      orderBy: [{ epoch: "asc" }, { id: "asc" }],
+    }),
+    prisma.conversationKeyReceipt.findMany({
+      where: { conversationId, userId },
+      select: { epoch: true },
+      orderBy: { epoch: "asc" },
+    }),
+  ]);
+
+  return {
+    currentKeyEpoch: conversation.currentKeyEpoch,
+    acknowledgedEpochs: receipts.map((receipt) => receipt.epoch),
+    packages,
+  };
+}
+
 export async function claimConversationKey({
   conversationId,
   userId,
@@ -274,10 +352,8 @@ export async function claimConversationKey({
     const conversation = await tx.conversation.findUnique({
       where: { id: conversationId },
       select: {
-        keyCreatedById: true,
-        members: {
-          select: { encryptedConversationKey: true },
-        },
+        currentKeyEpoch: true,
+        keyClaimedById: true,
       },
     });
 
@@ -285,31 +361,39 @@ export async function claimConversationKey({
       throw new AppError("Conversation not found", 404);
     }
 
-    if (conversation.keyCreatedById != null) {
-      return { claimed: false, keyCreatedById: conversation.keyCreatedById };
+    // This user has already claimed this epoch.
+    // Allow them to continue if they are retrying.
+    if (conversation.keyClaimedById === userId) {
+      return {
+        claimed: true,
+        epoch: conversation.currentKeyEpoch,
+        keyCreatedById: userId,
+      };
     }
 
-    const alreadyHasKey = conversation.members.some(
-      (m) => m.encryptedConversationKey != null,
-    );
-    if (alreadyHasKey) {
-      return { claimed: false, keyCreatedById: null, alreadyHasKey: true };
-    }
-
-    const updated = await tx.conversation.updateMany({
-      where: { id: conversationId, keyCreatedById: null },
-      data: { keyCreatedById: userId },
+    // Atomically claim the epoch only if nobody has claimed it.
+    const claim = await tx.conversation.updateMany({
+      where: {
+        id: conversationId,
+        currentKeyEpoch: conversation.currentKeyEpoch,
+        keyClaimedById: null,
+      },
+      data: {
+        keyClaimedById: userId,
+      },
     });
 
-    if (updated.count === 0) {
-      // Lost a concurrent claim — another device generated the key first.
-      const winner = await tx.conversation.findUnique({
-        where: { id: conversationId },
-        select: { keyCreatedById: true },
-      });
-      return { claimed: false, keyCreatedById: winner?.keyCreatedById ?? null };
+    if (claim.count === 1) {
+      return {
+        claimed: true,
+        epoch: conversation.currentKeyEpoch,
+        keyCreatedById: userId,
+      };
     }
 
-    return { claimed: true, keyCreatedById: userId };
+    return {
+      claimed: false,
+      message: "Another user has already claimed this key epoch",
+    };
   });
 }

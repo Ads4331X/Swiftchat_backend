@@ -15,12 +15,12 @@ export async function createGroup({
     data: {
       createdById: userId,
       name,
-members: {
-          create: [
-            { userId },
-            ...membersId.map((id: number) => ({ userId: id })),
-          ],
-        },
+      members: {
+        create: [
+          { userId },
+          ...membersId.map((id: number) => ({ userId: id })),
+        ],
+      },
     },
   });
   return group;
@@ -33,23 +33,37 @@ export async function addMembers({
   userIds: number[];
   conversationId: number;
 }) {
-  // filter out users that don't exist
-  const users = await prisma.user.findMany({
-    where: { id: { in: userIds } },
-    select: { id: true },
-  });
+  return prisma.$transaction(async (tx) => {
+    // filter out users that don't exist
+    const users = await tx.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true },
+    });
 
-  const validUserIds = users.map((u) => u.id);
+    const validUserIds = users.map((u) => u.id);
 
-  // adds all the valid users to the conversation
-  const { count } = await prisma.conversationMember.createMany({
-    data: validUserIds.map((uid) => ({
-      conversationId,
-      userId: uid,
-    })),
-    skipDuplicates: true,
+    // adds all the valid users to the conversation
+    const { count } = await tx.conversationMember.createMany({
+      data: validUserIds.map((uid) => ({
+        conversationId,
+        userId: uid,
+      })),
+      skipDuplicates: true,
+    });
+
+    // rotate the conversation key only if new members were added
+    if (count > 0) {
+      await tx.conversation.update({
+        where: { id: conversationId },
+        data: {
+          currentKeyEpoch: { increment: 1 },
+          keyClaimedById: null,
+        },
+      });
+    }
+
+    return count;
   });
-  return count;
 }
 
 export async function removeGroupMember({
@@ -59,11 +73,27 @@ export async function removeGroupMember({
   conversationId: number;
   userId: number;
 }) {
-  // removes the user
-  await prisma.conversationMember.delete({
-    where: {
-      conversationId_userId: { conversationId, userId },
-    },
+  await prisma.$transaction(async (tx) => {
+    // removes the user
+    const removed = await tx.conversationMember.deleteMany({
+      where: {
+        conversationId,
+        userId,
+      },
+    });
+
+    if (removed.count === 0) {
+      throw new AppError("User is not a member of this conversation", 404);
+    }
+
+    // rotate the conversation key
+    await tx.conversation.update({
+      where: { id: conversationId },
+      data: {
+        currentKeyEpoch: { increment: 1 },
+        keyClaimedById: null,
+      },
+    });
   });
 }
 
@@ -119,11 +149,22 @@ export async function leaveGroup({
   conversationId: number;
   userId: number;
 }) {
-  // remove user from the group
-  await prisma.conversationMember.delete({
-    where: {
-      conversationId_userId: { conversationId, userId },
-    },
+  await prisma.$transaction(async (tx) => {
+    // remove user from the group
+    await tx.conversationMember.delete({
+      where: {
+        conversationId_userId: { conversationId, userId },
+      },
+    });
+
+    // rotate the conversation key
+    await tx.conversation.update({
+      where: { id: conversationId },
+      data: {
+        currentKeyEpoch: { increment: 1 },
+        keyClaimedById: null,
+      },
+    });
   });
 }
 
@@ -177,5 +218,3 @@ export async function deleteGroup({
     });
   });
 }
-
-

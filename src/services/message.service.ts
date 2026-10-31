@@ -96,19 +96,35 @@ export async function getMessages({
 }
 
 export async function sendMessages({
-  conversationId: conversationId,
-  senderId: senderId,
+  conversationId,
+  senderId,
   text: messageText,
   nonce: normalizedNonce,
-  replyToId: replyToId,
-  forwardedFromMsgId: forwardedFromMsgId,
+  replyToId,
+  forwardedFromMsgId,
   file,
   fileName,
   encryptedKey,
   encryptedHeader,
   keyNonce,
   headerNonce,
+  keyEpoch,
 }: SendMessage) {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { currentKeyEpoch: true },
+  });
+
+  if (!conversation) {
+    throw new AppError("Conversation not found", 404);
+  }
+
+  if (conversation.currentKeyEpoch !== keyEpoch) {
+    throw new AppError(
+      "Conversation key has changed. Please refresh and try again.",
+      409,
+    );
+  }
   // creates a new message in the conversation, together with its optional
   // attachment, in a single operation
   const message = await prisma.message.create({
@@ -119,6 +135,7 @@ export async function sendMessages({
       nonce: normalizedNonce,
       replyToId: replyToId,
       forwardedFromMsgId: forwardedFromMsgId,
+      keyEpoch: keyEpoch,
       ...(file && encryptedKey && encryptedHeader && keyNonce && headerNonce
         ? {
             attachment: {
