@@ -1,4 +1,9 @@
 import { AppError } from "../errors/AppError.js";
+import {
+  getAllEpochsForConversation,
+  getCurrentEpochForConversation,
+  validateHistoricalEpochs,
+} from "../helpers/helper.js";
 import prisma from "../prisma.js";
 
 export async function getConversations({ userId }: { userId: number }) {
@@ -317,6 +322,7 @@ export async function getHistoricalKeyPackages({
         conversationId,
         userId,
         epoch: { lt: conversation.currentKeyEpoch },
+        rejectedAt: null,
       },
       select: {
         id: true,
@@ -396,4 +402,217 @@ export async function claimConversationKey({
       message: "Another user has already claimed this key epoch",
     };
   });
+}
+
+export async function getKeyGaps({
+  conversationId,
+}: {
+  conversationId: number;
+}) {
+  const currentKeyEpoch = await getCurrentEpochForConversation(conversationId);
+
+  if (!currentKeyEpoch) {
+    throw new AppError("Conversation not found", 404);
+  }
+
+  // members of the group
+  const members = await prisma.conversationMember.findMany({
+    where: { conversationId },
+    select: { userId: true },
+  });
+
+  const allKnownEpochs = await getAllEpochsForConversation(
+    conversationId,
+    currentKeyEpoch,
+  );
+
+  const recipients = [];
+
+  for (const member of members) {
+    // gets acknowledged epochs for that user
+    const epochKeyReceipts = await prisma.conversationKeyReceipt.findMany({
+      where: { conversationId, userId: member.userId },
+      select: { epoch: true },
+    });
+
+    const epochKeyReceiptsSet = new Set(
+      epochKeyReceipts.map((data) => data.epoch),
+    );
+
+    // missing epochs of the user
+    const missingEpochs = allKnownEpochs.filter(
+      (epoch) => !epochKeyReceiptsSet.has(epoch),
+    );
+
+    recipients.push({
+      userId: member.userId,
+      missingEpochs,
+    });
+  }
+
+  return {
+    currentKeyEpoch: currentKeyEpoch,
+    recipients,
+  };
+}
+
+export async function uploadHistoricalKeys({
+  conversationId,
+  senderId,
+  historicalKeys,
+  userId,
+}: {
+  conversationId: number;
+  senderId: number;
+  historicalKeys: { epoch: number; encryptedKey: string; nonce: string }[];
+  userId: number;
+}) {
+  const epochs = historicalKeys.map((key) => key.epoch);
+
+  await validateHistoricalEpochs(epochs, conversationId);
+
+  const results = [];
+
+  for (const { epoch, encryptedKey, nonce } of historicalKeys) {
+    // Skip if already acknowledged
+    const receipt = await prisma.conversationKeyReceipt.findUnique({
+      where: {
+        conversationId_userId_epoch: { conversationId, userId, epoch },
+      },
+    });
+
+    if (receipt) {
+      results.push({ epoch, status: "alreadySatisfied" });
+      continue;
+    }
+
+    const existingPackage = await prisma.conversationKeyPackage.findUnique({
+      where: {
+        conversationId_userId_epoch_senderUserId: {
+          conversationId,
+          userId,
+          epoch,
+          senderUserId: senderId,
+        },
+      },
+    });
+
+    if (existingPackage && !existingPackage.rejectedAt) {
+      if (
+        existingPackage.encryptedKey !== encryptedKey ||
+        existingPackage.nonce !== nonce
+      ) {
+        throw new AppError(`Different package exists for epoch ${epoch}`, 409);
+      }
+
+      results.push({ epoch, status: "duplicate" });
+      continue;
+    }
+
+    if (existingPackage) {
+      await prisma.conversationKeyPackage.update({
+        where: { id: existingPackage.id },
+        data: { encryptedKey, nonce, rejectedAt: null },
+      });
+    } else {
+      await prisma.conversationKeyPackage.create({
+        data: {
+          conversationId,
+          userId,
+          epoch,
+          encryptedKey,
+          nonce,
+          senderUserId: senderId,
+        },
+      });
+    }
+
+    results.push({ epoch, status: "stored" });
+  }
+
+  return {
+    message: "Historical key packages processed",
+    results,
+  };
+}
+
+export async function acknowledgeHistoricalKey({
+  conversationId,
+  userId,
+  epochs,
+}: {
+  conversationId: number;
+  userId: number;
+  epochs: number[];
+}) {
+  const result = await validateHistoricalEpochs(epochs, conversationId);
+
+  const packages = await prisma.conversationKeyPackage.findMany({
+    where: {
+      conversationId,
+      userId,
+      epoch: { in: result },
+      rejectedAt: null,
+    },
+    select: { epoch: true },
+  });
+
+  const availableEpochs = new Set(packages.map((keyPackage) => keyPackage.epoch));
+  const missingEpochs = result.filter(
+    (epoch) => !availableEpochs.has(epoch),
+  );
+
+  if (missingEpochs.length > 0) {
+    throw new AppError(
+      `No valid historical key package for epoch: ${missingEpochs.join(", ")}`,
+      400,
+    );
+  }
+
+  const keyReceipt = await prisma.conversationKeyReceipt.createMany({
+    data: result.map((epoch) => ({ conversationId, userId, epoch })),
+    skipDuplicates: true,
+  });
+
+  return {
+    message: "Historical keys acknowledged successfully",
+    totalEpoch: epochs.length,
+    acknowledgedEpochs: keyReceipt.count,
+  };
+}
+
+export async function rejectHistoricalKeyPackage({
+  conversationId,
+  packageId,
+  userId,
+}: {
+  conversationId: number;
+  packageId: number;
+  userId: number;
+}) {
+  const keyPackage = await prisma.conversationKeyPackage.findFirst({
+    where: {
+      id: packageId,
+      conversationId,
+      userId,
+    },
+  });
+
+  if (!keyPackage) {
+    throw new AppError("Key package not found", 404);
+  }
+
+  if (keyPackage.rejectedAt) {
+    throw new AppError("Key package already rejected", 409);
+  }
+
+  await prisma.conversationKeyPackage.update({
+    where: { id: packageId },
+    data: { rejectedAt: new Date() },
+  });
+
+  return {
+    message: "Historical key package rejected successfully",
+    packageId,
+  };
 }

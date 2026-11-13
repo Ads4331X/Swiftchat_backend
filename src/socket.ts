@@ -1,7 +1,11 @@
 import jwt from "jsonwebtoken";
 import prisma from "./prisma.js";
 import type { ExtendedError, Server, Socket } from "socket.io";
-import { canEmitToConversation, ensureMember } from "./helpers/helper.js";
+import {
+  canEmitToConversation,
+  emitToConversation,
+  ensureMember,
+} from "./helpers/helper.js";
 import { randomUUID } from "node:crypto";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "";
@@ -162,6 +166,34 @@ function handleCallParticipantDisconnect(io: Server, userId: number) {
 // Track every active socket for each user
 const userSockets = new Map<number, Set<string>>();
 const activeCalls = new Map<string, Call>();
+
+export async function notifyConversationKeyRotated(
+  io: Server,
+  conversationId: number,
+  removedUserId?: number,
+) {
+  if (removedUserId != null) {
+    const socketIds = userSockets.get(removedUserId);
+    if (socketIds) {
+      for (const socketId of socketIds) {
+        const socket = io.sockets.sockets.get(socketId);
+        if (socket) {
+          void socket.leave(String(conversationId));
+        }
+      }
+    }
+  }
+
+  const members = await prisma.conversationMember.findMany({
+    where: { conversationId },
+    select: { userId: true },
+  });
+
+  emitToConversation(io, conversationId, "conversation-key-rotated", {
+    conversationId,
+    memberIds: members.map((member) => member.userId),
+  });
+}
 
 export function setupSocket(io: Server) {
   io.use((socket: AuthenticatedSocket, next: (err?: ExtendedError) => void) => {

@@ -9,6 +9,22 @@ import {
   findUser,
   parseId,
 } from "../helpers/helper.js";
+import { notifyConversationKeyRotated } from "../socket.js";
+
+async function emitKeyRotation(
+  req: Request,
+  conversationId: number,
+  removedUserId?: number,
+) {
+  const io = req.app.get("io");
+  if (!io) return;
+
+  try {
+    await notifyConversationKeyRotated(io, conversationId, removedUserId);
+  } catch (error) {
+    console.error("Failed to emit conversation key rotation:", error);
+  }
+}
 
 export async function createGroup(req: Request, res: Response) {
   try {
@@ -56,6 +72,8 @@ export async function addMembers(req: Request, res: Response) {
       conversationId,
     });
 
+    await emitKeyRotation(req, conversationId);
+
     res.status(201).json({ added: addGroupMembers });
   } catch (err) {
     return handleError(err, res);
@@ -90,6 +108,8 @@ export async function removeGroupMember(req: Request, res: Response) {
         .json({ error: "User is not a member of this conversation" });
 
     await groupServices.removeGroupMember({ conversationId, userId });
+
+    await emitKeyRotation(req, conversationId, userId);
 
     return res.status(200).json({ message: "User removed from conversation" });
   } catch (err) {
@@ -152,6 +172,8 @@ export async function leaveGroup(req: Request, res: Response) {
       conversationId,
       userId: req.userId!,
     });
+
+    await emitKeyRotation(req, conversationId, req.userId!);
 
     return res.status(200).json({ message: "User removed from conversation" });
   } catch (err) {

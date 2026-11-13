@@ -6,7 +6,9 @@ import type { Server, Socket } from "socket.io";
 import prisma from "./prisma.js";
 
 process.env.JWT_SECRET = "swiftchat-socket-test-secret";
-const { setupSocket } = await import("./socket.js");
+const { notifyConversationKeyRotated, setupSocket } = await import(
+  "./socket.js"
+);
 
 type SocketHandler = (...args: unknown[]) => unknown;
 
@@ -14,6 +16,7 @@ class TestSocket {
   readonly handshake: { auth: { token: string } };
   readonly handlers = new Map<string, SocketHandler>();
   readonly joinedRooms: string[] = [];
+  readonly leftRooms: string[] = [];
   userId?: number;
 
   constructor(
@@ -32,6 +35,10 @@ class TestSocket {
     this.joinedRooms.push(room);
   }
 
+  async leave(room: string) {
+    this.leftRooms.push(room);
+  }
+
   async trigger(event: string, ...args: unknown[]) {
     const handler = this.handlers.get(event);
     assert.ok(handler, `Expected a handler for ${event}`);
@@ -45,6 +52,7 @@ class TestIo {
     event: string;
     payload: unknown;
   }[] = [];
+  readonly sockets = { sockets: new Map<string, TestSocket>() };
   middleware:
     | ((socket: TestSocket, next: (error?: Error) => void) => void)
     | undefined;
@@ -159,6 +167,7 @@ async function connect(userId: number, socketId: string, token?: string) {
   });
   if (authError) throw authError;
   await io.connectionHandler(socket);
+  io.sockets.sockets.set(socket.id, socket);
   return socket;
 }
 
@@ -637,4 +646,36 @@ test("an audio call can publish and receive screen-share state", async () => {
 
   await caller.trigger("call:end", { callId });
   await participant.trigger("disconnect");
+});
+
+test("key rotation evicts the removed member and notifies remaining members", async () => {
+  members = [401, 402, 403].map((userId) => ({
+    conversationId: 44,
+    userId,
+  }));
+  const remaining = await connect(401, "rotation-remaining");
+  const participant = await connect(402, "rotation-participant");
+  const removed = await connect(403, "rotation-removed");
+
+  members = members.filter((member) => member.userId !== 403);
+
+  await notifyConversationKeyRotated(
+    io as unknown as Server,
+    44,
+    403,
+  );
+
+  assert.deepEqual(removed.leftRooms, ["44"]);
+  assert.deepEqual(remaining.leftRooms, []);
+  assert.deepEqual(participant.leftRooms, []);
+
+  const rotation = io.emitted.find(
+    ({ event }) => event === "conversation-key-rotated",
+  );
+  assert.ok(rotation);
+  assert.equal(rotation.target, "44");
+  assert.deepEqual(rotation.payload, {
+    conversationId: 44,
+    memberIds: [401, 402],
+  });
 });

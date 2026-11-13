@@ -208,5 +208,6 @@ test("returns only the authenticated user's historical packages and receipts", a
     conversationId: 12,
     userId: 7,
     epoch: { lt: 4 },
+    rejectedAt: null,
   });
 });

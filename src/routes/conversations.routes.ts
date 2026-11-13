@@ -107,4 +107,23 @@ router.delete(
   attachmentController.deleteAttachment,
 );
 
+router.get("/:id/key-gaps", auth, conversationController.getKeyGaps);
+
+router.put(
+  "/:id/historical-keys/:userId",
+  auth,
+  conversationController.uploadHistoricalKeys,
+);
+
+router.post(
+  "/:id/keys/ack",
+  auth,
+  conversationController.acknowledgeHistoricalKey,
+);
+
+router.delete(
+  "/:id/keys/packages/:packageId/reject",
+  auth,
+  conversationController.rejectHistoricalKeyPackage,
+);
 export default router;

@@ -212,3 +212,55 @@ export async function findAttachment(messageId: number) {
   });
   return attachment;
 }
+
+export async function getAllEpochsForConversation(
+  conversationId: number,
+  currentKeyEpoch: number,
+) {
+  const allKnownEpochs = await prisma.conversationKeyPackage.findMany({
+    where: {
+      conversationId,
+      epoch: {
+        not: currentKeyEpoch,
+      },
+    },
+    select: {
+      epoch: true,
+    },
+  });
+
+  // returns in array
+  return allKnownEpochs.map((data) => data.epoch);
+}
+
+export async function getCurrentEpochForConversation(conversationId: number) {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { currentKeyEpoch: true },
+  });
+  return conversation?.currentKeyEpoch ?? null;
+}
+
+export async function validateHistoricalEpochs(
+  epochs: number[],
+  conversationId: number,
+) {
+  const currentKeyEpoch = await getCurrentEpochForConversation(conversationId);
+
+  if (!currentKeyEpoch) {
+    throw new AppError("Conversation not found", 404);
+  }
+
+  const allKnownEpochs = await getAllEpochsForConversation(
+    conversationId,
+    currentKeyEpoch,
+  );
+
+  for (const epoch of epochs) {
+    if (!allKnownEpochs.includes(epoch)) {
+      throw new AppError(`Invalid historical key epoch: ${epoch}`, 400);
+    }
+  }
+
+  return epochs;
+}

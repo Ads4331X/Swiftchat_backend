@@ -1,7 +1,14 @@
 import { Request, Response } from "express";
 import * as ConversationServices from "../services/conversation.service.js";
 import { handleError } from "../helpers/error.js";
-import { ensureMember, findMember, parseId } from "../helpers/helper.js";
+import {
+  ensureMember,
+  findMember,
+  findUser,
+  parseId,
+  validateHistoricalEpochs,
+} from "../helpers/helper.js";
+import { json } from "stream/consumers";
 
 export async function getConversations(req: Request, res: Response) {
   try {
@@ -142,6 +149,114 @@ export async function claimKey(req: Request, res: Response) {
     if (!result.claimed) {
       return res.status(409).json(result);
     }
+
+    return res.status(200).json(result);
+  } catch (err) {
+    return handleError(err, res);
+  }
+}
+
+export async function getKeyGaps(req: Request, res: Response) {
+  try {
+    const conversationId = parseId(req.params.id as string);
+    const userId = req.userId!;
+
+    // check is the requester is a member of the group
+    await ensureMember(conversationId, userId);
+
+    const result = await ConversationServices.getKeyGaps({
+      conversationId,
+    });
+
+    return res.status(200).json(result);
+  } catch (err) {
+    return handleError(err, res);
+  }
+}
+
+
+export async function uploadHistoricalKeys(req: Request, res: Response) {
+  try {
+    const conversationId = parseId(req.params.id as string);
+    const senderId = req.userId!;
+
+    const receiver = await findUser(parseId(req.params.userId as string));
+
+    if (!receiver) {
+      return res.status(404).json({ error: "Receiver not found" });
+    }
+
+    const userId = receiver.id;
+
+    // Ensure both sender and receiver are group members
+    await ensureMember(conversationId, senderId);
+    await ensureMember(conversationId, userId);
+
+    const { historicalKeys } = req.body;
+
+    if (
+      !historicalKeys ||
+      !Array.isArray(historicalKeys) ||
+      historicalKeys.length === 0
+    ) {
+      return res.status(400).json({
+        error: "Historical keys are required and must be a non-empty array",
+      });
+    }
+
+    const result = await ConversationServices.uploadHistoricalKeys({
+      conversationId,
+      senderId,
+      historicalKeys,
+      userId,
+    });
+
+    return res.status(200).json(result);
+  } catch (err) {
+    return handleError(err, res);
+  }
+}
+
+export async function acknowledgeHistoricalKey(req: Request, res: Response) {
+  try {
+    const conversationId = parseId(req.params.id as string);
+    const userId = req.userId!;
+
+    await ensureMember(conversationId, userId);
+
+    const { epochs } = req.body as { epochs: number[] };
+
+    if (!Array.isArray(epochs) || epochs.length === 0) {
+      return res.status(400).json({
+        error: "Epochs are required",
+      });
+    }
+
+    const result = await ConversationServices.acknowledgeHistoricalKey({
+      conversationId,
+      userId,
+      epochs,
+    });
+
+    return res.status(200).json(result);
+  } catch (err) {
+    return handleError(err, res);
+  }
+}
+
+export async function rejectHistoricalKeyPackage(req: Request, res: Response) {
+  try {
+    const conversationId = parseId(req.params.id as string);
+    const packageId = parseId(req.params.packageId as string);
+    const userId = req.userId!;
+
+    await ensureMember(conversationId, userId);
+
+    const result = await ConversationServices.rejectHistoricalKeyPackage({
+      conversationId,
+      packageId,
+      userId,
+    });
 
     return res.status(200).json(result);
   } catch (err) {
